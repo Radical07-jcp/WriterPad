@@ -161,6 +161,8 @@ const TOUCH_INTERFACE_BOOST: f32 = 1.3;
 
 /// The application.
 pub struct WordApp {
+    /// The collapsed ribbon is shown for a moment after a tab is tapped (like Word); clicking the page hides it again.
+    pub ribbon_peek: bool,
     /// The host runs on a touch screen (iPad): the interface is drawn larger so fingers can hit it,
     /// unless the user picked an Interface size in File › Options.
     pub touch_device: bool,
@@ -246,6 +248,7 @@ impl SaveChoice {
 impl WordApp {
     pub fn new(session: Session, services: Services) -> Self {
         WordApp {
+            ribbon_peek: false,
             touch_device: false,
             session,
             ui: UiState::default(),

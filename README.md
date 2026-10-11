@@ -29,3 +29,10 @@ dialog; Save/Export downloads to the Files app.
 Tap = caret. Double/triple tap = select word/paragraph. Drag = scroll (with coasting). Rest a finger
 ~0.5 s, then drag = select text. Pinch = zoom the page. The interface is drawn 30% larger on touch
 screens unless you set File > Options > Interface size. Paper: Layout > Size > Folio (8.5 x 13).
+
+## Adding fonts
+Drop `.ttf` / `.otf` files, a whole font folder, or a font `.zip` (e.g. a Google Fonts download, which already includes its `OFL.txt`) into `assets/fonts/`, commit and push. Subfolders are fine; if a folder has a variable font, its `static/` copy is skipped. Keep each family's licence text with it. The build embeds every font file in that folder
+automatically; the family name inside the file is what appears in the font list. Each font adds to the
+app's download size. Only add fonts whose licence lets you redistribute them (OFL, Apache, public domain):
+a public repo and site hand the files to everyone, so Microsoft fonts do not belong there
+(see `FONTS-NOTICE.md`).

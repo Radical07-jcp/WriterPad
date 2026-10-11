@@ -1153,6 +1153,9 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
     {
         return;
     }
+    if app.ribbon_peek && resp.contains_pointer() && ui.input(|i| i.pointer.primary_pressed()) {
+        app.ribbon_peek = false;
+    }
     if touch_gesture(app, ui, resp) {
         return;
     }

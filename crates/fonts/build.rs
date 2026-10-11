@@ -9,6 +9,7 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 fn main() {
+    bundle_user_fonts();
     println!("cargo::rerun-if-env-changed=CRAFT_FONTS_DIR");
     println!("cargo::rerun-if-env-changed=CRAFT_FONTS_REQUIRED");
     let mut src = String::from("pub static CRAFT_FONTS: &[CraftFont] = &[\n");
@@ -70,4 +71,61 @@ fn craft_fonts(dir: &std::path::Path) -> Result<(String, Vec<String>), String> {
         );
     }
     Ok((out, covered))
+}
+
+/// Every font file (.ttf .otf .ttc .otc) under `assets/fonts`, in any subfolder, that `src/fontdb.rs`
+/// doesn't already list is embedded as `USER_FONTS`, so adding fonts is just dropping the files (or a
+/// whole font folder) in. A Google Fonts folder holds the variable fonts and a `static` folder with
+/// the same styles; when a variable font is present the `static` folder is skipped (no duplicates).
+fn bundle_user_fonts() {
+    let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap_or_default());
+    let dir = manifest.join("../../assets/fonts");
+    println!("cargo::rerun-if-changed={}", dir.display());
+    println!("cargo::rerun-if-changed=src/fontdb.rs");
+    let listed = std::fs::read_to_string(manifest.join("src/fontdb.rs")).unwrap_or_default();
+    let mut found = Vec::new();
+    collect_fonts(&dir, &mut found);
+    let mut src = String::from("pub static USER_FONTS: &[&[u8]] = &[\n");
+    for path in found {
+        let Ok(rel) = path.strip_prefix(&dir) else { continue };
+        let rel = rel.to_string_lossy().replace('\\', "/");
+        if listed.contains(&format!("assets/fonts/{rel}\"")) {
+            continue;
+        }
+        let Ok(abs) = path.canonicalize() else { continue };
+        println!("cargo::rerun-if-changed={}", abs.display());
+        let _ = writeln!(src, "    include_bytes!({:?}),", abs.display().to_string());
+    }
+    src.push_str("];\n");
+    let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap_or_default()).join("user_fonts.rs");
+    if let Err(e) = std::fs::write(&out, src) {
+        println!("cargo::error=writing {}: {e}", out.display());
+    }
+}
+
+fn is_font_file(name: &str) -> bool {
+    let l = name.to_ascii_lowercase();
+    [".ttf", ".otf", ".ttc", ".otc"].iter().any(|x| l.ends_with(x))
+}
+
+fn collect_fonts(dir: &std::path::Path, out: &mut Vec<PathBuf>) {
+    let Ok(read) = std::fs::read_dir(dir) else { return };
+    let mut entries: Vec<_> = read.flatten().collect();
+    entries.sort_by_key(|e| e.file_name());
+    let has_variable = entries.iter().any(|e| {
+        let n = e.file_name().to_string_lossy().to_ascii_lowercase();
+        is_font_file(&n) && (n.contains("variable") || n.contains('['))
+    });
+    for e in entries {
+        let path = e.path();
+        let name = e.file_name().to_string_lossy().to_string();
+        if path.is_dir() {
+            if has_variable && name.eq_ignore_ascii_case("static") {
+                continue;
+            }
+            collect_fonts(&path, out);
+        } else if is_font_file(&name) {
+            out.push(path);
+        }
+    }
 }

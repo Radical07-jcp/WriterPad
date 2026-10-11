@@ -21,6 +21,9 @@ pub fn bundled() -> &'static [&'static [u8]] {
     BUNDLED
 }
 
+// `USER_FONTS`: every other font file in `assets/fonts`, embedded by build.rs.
+include!(concat!(env!("OUT_DIR"), "/user_fonts.rs"));
+
 static BUNDLED: &[&[u8]] = &[
     include_bytes!("../../../assets/fonts/SourceSans3-Regular.ttf"),
     include_bytes!("../../../assets/fonts/SourceSans3-Semibold.ttf"),
@@ -635,7 +638,7 @@ impl FontDb {
     pub fn with_font_dirs(font_dirs: Vec<std::path::PathBuf>) -> Self {
         let mut faces = Vec::new();
         let craft = crate::japanese_document_fonts().into_iter().map(|f| f.bytes);
-        for data in BUNDLED.iter().copied().chain(craft) {
+        for data in BUNDLED.iter().copied().chain(USER_FONTS.iter().copied()).chain(craft) {
             for f in enumerate_faces(data) {
                 if let Some(f) = make_face(FontBytes::Static(data), f.index, f.family, f.style, f.legacy, f.coords) {
                     faces.push(Arc::new(f));

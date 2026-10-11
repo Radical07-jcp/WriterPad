@@ -149,14 +149,32 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                     }
                     if resp.clicked() {
                         let _ = app.run("ui.tab", json!({"tab": tab}));
+                        // A tab tapped while the ribbon is hidden shows it until the page is clicked.
+                        app.ribbon_peek = app.ui.ribbon_collapsed && tab != "File";
                     }
                     if resp.double_clicked() && tab != "File" {
                         let _ = app.run("ui.collapseRibbon", json!({}));
+                        app.ribbon_peek = false;
                     }
                 }
+                // Show / hide the ribbon (Word's ^ at the right end of the tab row).
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let collapsed = app.ui.ribbon_collapsed;
+                    let (r, resp) = ui.allocate_exact_size(vec2(28.0, 24.0), Sense::click());
+                    if resp.hovered() {
+                        ui.painter().rect_filled(r, 4.0, t.hover);
+                    }
+                    let icon = if collapsed { "chevronDown" } else { "chevronUp" };
+                    icons::paint(ui.painter(), Rect::from_center_size(r.center(), vec2(16.0, 16.0)), icon, t.icon, t.accent);
+                    let tip = if collapsed { "Show the Ribbon" } else { "Hide the Ribbon" };
+                    if resp.on_hover_text(tip).clicked() {
+                        let _ = app.run("ui.collapseRibbon", json!({}));
+                        app.ribbon_peek = false;
+                    }
+                });
             });
         });
-    if app.ui.ribbon_collapsed {
+    if app.ui.ribbon_collapsed && !app.ribbon_peek {
         return;
     }
     egui::Panel::top("ribbon")

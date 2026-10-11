@@ -6,9 +6,10 @@ use std::rc::Rc;
 
 use wasm_bindgen::JsCast as _;
 use wordcraft_engine::Session;
-use wordcraft_ui_egui::{Inbox, Services, WordApp};
+use wordcraft_ui_egui::{Inbox, Services, UiState, WordApp};
 
-const DOC_EXTS: &[&str] = &["docx", "docm", "dotx", "dotm", "doc", "dot", "odt", "rtf", "txt", "md", "html", "htm", "tex", "json"];
+const FONT_EXTS: &[&str] = &["ttf", "otf", "ttc", "otc"];
+const DOC_EXTS: &[&str] = &["ttf", "otf", "ttc", "otc", "docx", "docm", "dotx", "dotm", "doc", "dot", "odt", "rtf", "txt", "md", "html", "htm", "tex", "json"];
 const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp"];
 const RECIPIENT_EXTS: &[&str] = &["csv", "tsv", "txt"];
 const CANVAS_ID: &str = "wordcraft_canvas";
@@ -25,6 +26,8 @@ pub fn start() {
             log::error!("missing <canvas id=\"{CANVAS_ID}\">");
             return;
         };
+        storage_ready().await;
+        install_stored_fonts();
         let dirty = Rc::new(Cell::new(false));
         if let Err(e) = guard_unload(dirty.clone()) {
             log::error!("no unsaved-changes guard: {e}");
@@ -51,7 +54,14 @@ pub fn start() {
                     let mut app = WordApp::new(Session::new(doc), services(inbox.clone(), cc.egui_ctx.clone(), dirty));
                     app.autosave = false;
                     app.touch_device = coarse_pointer();
-                    Ok(Box::new(WebShell { app, inbox }))
+                    let mut saved = String::new();
+                    if let Ok(Some(json)) = store_get("config")
+                        && let Ok(ui) = serde_json::from_str::<UiState>(&json)
+                    {
+                        app.apply_prefs(ui);
+                        saved = json;
+                    }
+                    Ok(Box::new(WebShell { app, inbox, saved, last_check: 0.0 }))
                 }),
             )
             .await;
@@ -81,6 +91,46 @@ fn query() -> String {
 struct WebShell {
     app: WordApp,
     inbox: Inbox,
+    /// The settings JSON last written to IndexedDB, and when the app last checked (seconds).
+    saved: String,
+    last_check: f64,
+}
+
+#[wasm_bindgen::prelude::wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = wpStore, js_name = getItem, catch)]
+    fn store_get(key: &str) -> Result<Option<String>, wasm_bindgen::JsValue>;
+    #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = wpStore, js_name = setItem, catch)]
+    fn store_set(key: &str, value: &str) -> Result<(), wasm_bindgen::JsValue>;
+    #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = wpStore, js_name = putFont, catch)]
+    fn store_put_font(name: &str, bytes: &[u8]) -> Result<(), wasm_bindgen::JsValue>;
+    #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = wpStore, js_name = fonts, catch)]
+    fn store_fonts() -> Result<js_sys::Array, wasm_bindgen::JsValue>;
+}
+
+/// Wait until `idb.js` has loaded the saved settings and fonts from IndexedDB (it always settles).
+async fn storage_ready() {
+    let Some(win) = web_sys::window() else { return };
+    let Ok(store) = js_sys::Reflect::get(&win, &"wpStore".into()) else { return };
+    let Ok(ready) = js_sys::Reflect::get(&store, &"ready".into()) else { return };
+    if let Ok(promise) = ready.dyn_into::<js_sys::Promise>() {
+        let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+    }
+}
+
+/// Fonts the user imported earlier (kept in IndexedDB) are added to the font database.
+fn install_stored_fonts() {
+    if let Ok(list) = store_fonts() {
+        for item in list.iter() {
+            if let Ok(bytes) = item.dyn_into::<js_sys::Uint8Array>() {
+                wordcraft_fonts::FontDb::global().add_font(bytes.to_vec());
+            }
+        }
+    }
+}
+
+fn is_font(name: &str) -> bool {
+    name.rsplit('.').next().is_some_and(|e| FONT_EXTS.iter().any(|f| e.eq_ignore_ascii_case(f)))
 }
 
 impl eframe::App for WebShell {
@@ -100,7 +150,30 @@ impl eframe::App for WebShell {
                 }
             });
         }
+        // Font files picked with File > Open (or dropped) are installed and remembered, not opened.
+        let fonts: Vec<(String, Vec<u8>)> = {
+            let mut inbox = self.inbox.lock().unwrap_or_else(|e| e.into_inner());
+            let (fonts, rest): (Vec<_>, Vec<_>) = std::mem::take(&mut *inbox).into_iter().partition(|(name, _)| is_font(name));
+            *inbox = rest;
+            fonts
+        };
+        for (name, bytes) in fonts {
+            let added = wordcraft_fonts::FontDb::global().add_font(bytes.clone());
+            log::info!("font {name}: {added} face(s) installed");
+            let _ = store_put_font(&name, &bytes);
+        }
         self.app.logic(ctx);
+        // Settings (ribbon, theme, preferences) are written to IndexedDB about once a second when they change.
+        let now = ctx.input(|i| i.time);
+        if now - self.last_check >= 1.0 {
+            self.last_check = now;
+            if let Ok(json) = serde_json::to_string(&self.app.prefs())
+                && json != self.saved
+            {
+                let _ = store_set("config", &json);
+                self.saved = json;
+            }
+        }
     }
 
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {

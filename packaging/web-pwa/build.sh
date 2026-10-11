@@ -6,6 +6,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
+# A font pack dropped in as a .zip (for example a Google Fonts download) is unpacked into a folder of the same name.
+find assets/fonts -type f -iname '*.zip' | while read -r z; do unzip -oq "$z" -d "${z%.*}"; done
+
 (cd apps/wordcraft-web && trunk build --release)
 SITE="$ROOT/dist/web"
 [ -f "$SITE/index.html" ] || { echo "error: build produced no index.html" >&2; exit 1; }
@@ -18,7 +21,14 @@ cp LICENSE-MIT "$L/LICENSE-MIT.txt"
 cp LICENSE-APACHE "$L/LICENSE-APACHE.txt"
 cp NOTICE "$L/NOTICE.txt"
 cp ATTRIBUTION.md "$L/ATTRIBUTION.md.txt"
-cp assets/fonts/OFL-*.txt "$L/"
+cp FONTS-NOTICE.md "$L/FONTS-NOTICE.txt"
+# Licence texts anywhere under assets/fonts (copied flat, folder names kept in the file name) and the font list.
+mkdir -p "$L/fonts"
+find assets/fonts -type f \( -iname '*.txt' -o -iname 'LICENSE*' -o -iname 'LICENCE*' -o -iname 'OFL*' \) | while read -r f; do
+  rel="${f#assets/fonts/}"; cp "$f" "$L/fonts/${rel//\//__}"
+done
+find assets/fonts -type f \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' -o -iname '*.otc' \) | sed 's#^assets/fonts/##' | sort > "$L/FONT-FILES.txt"
+echo "Bundled font files: $(wc -l < "$L/FONT-FILES.txt")"
 cp packaging/web-pwa/licenses-index.html "$L/index.html"
 cargo about generate --config packaging/web-pwa/about.toml \
   --manifest-path apps/wordcraft-web/Cargo.toml \
