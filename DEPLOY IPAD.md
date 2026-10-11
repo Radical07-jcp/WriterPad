@@ -29,3 +29,4 @@ dialog; Save/Export downloads to the Files app.
 Tap = caret. Double/triple tap = select word/paragraph. Drag = scroll (with coasting). Rest a finger
 ~0.5 s, then drag = select text. Pinch = zoom the page. The interface is drawn 30% larger on touch
 screens unless you set File > Options > Interface size. Paper: Layout > Size > Folio (8.5 x 13).
+… testing…
