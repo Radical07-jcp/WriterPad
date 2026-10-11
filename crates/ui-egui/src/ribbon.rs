@@ -9,6 +9,51 @@ use crate::{WordApp, icons};
 
 pub const TABS: [&str; 12] = ["File", "Home", "Insert", "Draw", "Design", "Layout", "References", "Mailings", "Review", "View", "Zotero", "Help"];
 
+
+/// Comments, Editing/Reviewing mode and Share as icon buttons, left to right in the title row right
+/// after the Quick Access Toolbar.
+pub fn doc_actions(app: &mut WordApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    ui.add_space(10.0);
+    // Comments pane.
+    let (r, resp) = ui.allocate_exact_size(vec2(28.0, 24.0), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(r, 4.0, t.hover);
+    }
+    icons::paint(ui.painter(), Rect::from_center_size(r.center(), vec2(16.0, 16.0)), "comment", t.icon, t.accent);
+    if resp.on_hover_text(tl!("Comments")).clicked() {
+        let _ = app.run("view.commentsPane", json!({}));
+    }
+    // Editing / Reviewing mode (accent-filled while changes are tracked).
+    let track = app.session.doc.settings.track_changes;
+    let (r, mode) = ui.allocate_exact_size(vec2(28.0, 24.0), Sense::click());
+    if track {
+        ui.painter().rect_filled(r, 4.0, t.accent);
+    } else if mode.hovered() {
+        ui.painter().rect_filled(r, 4.0, t.hover);
+    }
+    let (c, c2) = if track { (egui::Color32::WHITE, egui::Color32::WHITE) } else { (t.icon, t.accent) };
+    icons::paint(ui.painter(), Rect::from_center_size(r.center(), vec2(16.0, 16.0)), "pencil", c, c2);
+    let mode = mode.on_hover_text(if track { tl!("Reviewing — edits become suggestions") } else { tl!("Editing — edit the document directly") });
+    egui::Popup::menu(&mode).show(|ui| {
+        if ui.selectable_label(!track, tl!(tl!("Editing — edit the document directly"))).clicked() {
+            let _ = app.run("review.trackChanges", json!({"value": false}));
+            ui.close();
+        }
+        if ui.selectable_label(track, tl!(tl!("Reviewing — edits become suggestions"))).clicked() {
+            let _ = app.run("review.trackChanges", json!({"value": true}));
+            ui.close();
+        }
+    });
+    // Share.
+    let (r, resp) = ui.allocate_exact_size(vec2(30.0, 24.0), Sense::click());
+    ui.painter().rect_filled(r, 4.0, if resp.hovered() { t.accent_text } else { t.accent });
+    icons::paint(ui.painter(), Rect::from_center_size(r.center(), vec2(15.0, 15.0)), "share", egui::Color32::WHITE, egui::Color32::WHITE);
+    if resp.on_hover_text(tl!("Export a copy to share (PDF, Word document)")).clicked() {
+        let _ = app.run("ui.backstage", json!({"value": true, "page": "export"}));
+    }
+}
+
 /// True when the caret/selection touches a picture (#147).
 pub fn has_picture_selected(s: &wordcraft_engine::Session) -> bool {
     matches!(wordcraft_engine::cmd::objects::selected(s), Some((_, wordcraft_doc::para::InlineObject::Image { .. })))
@@ -109,46 +154,6 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                         let _ = app.run("ui.collapseRibbon", json!({}));
                     }
                 }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Share, Editing mode, Comments.
-                    let share = tl!("Share");
-                    let share_w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(share.to_string(), medium(12.0), t.text).size().x);
-                    let (r, resp) = ui.allocate_exact_size(vec2((share_w + 36.0).max(74.0), 24.0), Sense::click());
-                    ui.painter().rect_filled(r, 4.0, if resp.hovered() { t.accent_text } else { t.accent });
-                    icons::paint(
-                        ui.painter(),
-                        Rect::from_center_size(pos2(r.min.x + 14.0, r.center().y), vec2(14.0, 14.0)),
-                        "share",
-                        egui::Color32::WHITE,
-                        egui::Color32::WHITE,
-                    );
-                    ui.painter().text(pos2(r.min.x + 26.0, r.center().y), Align2::LEFT_CENTER, share, medium(12.0), egui::Color32::WHITE);
-                    if resp.on_hover_text(tl!("Export a copy to share (PDF, Word document)")).clicked() {
-                        let _ = app.run("ui.backstage", json!({"value": true, "page": "export"}));
-                    }
-                    ui.add_space(6.0);
-                    let track = app.session.doc.settings.track_changes;
-                    let mode = crate::widgets::icon_text_button(
-                        ui,
-                        "pencil",
-                        &format!("{} ▾", if track { tl!("Reviewing") } else { tl!("Editing") }),
-                        regular(12.0),
-                    );
-                    egui::Popup::menu(&mode).show(|ui| {
-                        if ui.selectable_label(!track, tl!(tl!("Editing — edit the document directly"))).clicked() {
-                            let _ = app.run("review.trackChanges", json!({"value": false}));
-                            ui.close();
-                        }
-                        if ui.selectable_label(track, tl!(tl!("Reviewing — edits become suggestions"))).clicked() {
-                            let _ = app.run("review.trackChanges", json!({"value": true}));
-                            ui.close();
-                        }
-                    });
-                    ui.add_space(4.0);
-                    if crate::widgets::icon_text_button(ui, "comment", tl!("Comments"), regular(12.0)).clicked() {
-                        let _ = app.run("view.commentsPane", json!({}));
-                    }
-                });
             });
         });
     if app.ui.ribbon_collapsed {

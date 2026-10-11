@@ -100,6 +100,7 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
                 qat_button(ui, app, "undo", &crate::i18n::prefixed("Undo", app.session.undo_label().unwrap_or("")), "edit.undo", can_undo);
                 qat_button(ui, app, "redo", tl!("Redo"), "edit.redo", can_redo);
                 qat_button(ui, app, "more", tl!("Customize Quick Access Toolbar"), "ui.dialog", true);
+                crate::ribbon::doc_actions(app, ui);
                 qat_end = ui.min_rect().max.x;
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     // Account / community.

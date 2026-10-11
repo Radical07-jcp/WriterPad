@@ -33,3 +33,38 @@ Generated-in-code art is original and has no file to list: the UI icon set (`cra
 | `crates/ui-egui/src/i18n/uk.tsv` | @dmatviichuk with Codex | Original translation from the English interface labels in this repository; no other product localisation copied | MIT OR Apache-2.0 | Ukrainian interface catalog; spelling checked with external VESUM and ULIF dictionaries, neither bundled |
 | `crates/ui-egui/src/i18n/et.tsv` | @henno with Codex | Original translation from the English interface labels in this repository; no other product localisation copied | MIT OR Apache-2.0 | Estonian interface catalog |
 | `crates/ui-egui/src/i18n/pt-br.tsv` | @edurbs with ZCode | Original translation from the English interface labels in this repository; no other product localisation copied | MIT OR Apache-2.0 | Brazilian Portuguese interface catalog; spelling checked with the external pt_BR Hunspell dictionary, not bundled |
+| `assets/fonts/Carlito-Regular.ttf` | tyPoland Lukasz Dziedzic | https://github.com/googlefonts/carlito | OFL-1.1 (`assets/fonts/OFL-Carlito.txt`) | Metric-compatible with Calibri |
+| `assets/fonts/Carlito-Bold.ttf` | tyPoland Lukasz Dziedzic | https://github.com/googlefonts/carlito | OFL-1.1 (`assets/fonts/OFL-Carlito.txt`) | Metric-compatible with Calibri |
+| `assets/fonts/Carlito-Italic.ttf` | tyPoland Lukasz Dziedzic | https://github.com/googlefonts/carlito | OFL-1.1 (`assets/fonts/OFL-Carlito.txt`) | Metric-compatible with Calibri |
+| `assets/fonts/Carlito-BoldItalic.ttf` | tyPoland Lukasz Dziedzic | https://github.com/googlefonts/carlito | OFL-1.1 (`assets/fonts/OFL-Carlito.txt`) | Metric-compatible with Calibri |
+| `assets/fonts/Caladea-Regular.ttf` | Carolina Giovagnoli, Andres Torresi / Huerta Tipografia | https://github.com/huertatipografica/Caladea | OFL-1.1 (`assets/fonts/OFL-Caladea.txt`) | Metric-compatible with Cambria |
+| `assets/fonts/Caladea-Bold.ttf` | Carolina Giovagnoli, Andres Torresi / Huerta Tipografia | https://github.com/huertatipografica/Caladea | OFL-1.1 (`assets/fonts/OFL-Caladea.txt`) | Metric-compatible with Cambria |
+| `assets/fonts/Caladea-Italic.ttf` | Carolina Giovagnoli, Andres Torresi / Huerta Tipografia | https://github.com/huertatipografica/Caladea | OFL-1.1 (`assets/fonts/OFL-Caladea.txt`) | Metric-compatible with Cambria |
+| `assets/fonts/Caladea-BoldItalic.ttf` | Carolina Giovagnoli, Andres Torresi / Huerta Tipografia | https://github.com/huertatipografica/Caladea | OFL-1.1 (`assets/fonts/OFL-Caladea.txt`) | Metric-compatible with Cambria |
+| `assets/fonts/LiberationSans-Regular.ttf` | Red Hat / Google (Liberation 2.x) | https://github.com/liberationfonts | OFL-1.1 (`assets/fonts/OFL-Liberation.txt`) | Metric-compatible with Arial, Times New Roman, Courier New |
+| `assets/fonts/LiberationSans-Bold.ttf` | Red Hat / Google (Liberation 2.x) | https://github.com/liberationfonts | OFL-1.1 (`assets/fonts/OFL-Liberation.txt`) | Metric-compatible with Arial, Times New Roman, Courier New |
+| `assets/fonts/LiberationSans-Italic.ttf` | Red Hat / Google (Liberation 2.x) | https://github.com/liberationfonts | OFL-1.1 (`assets/fonts/OFL-Liberation.txt`) | Metric-compatible with Arial, Times New Roman, Courier New |
+| `assets/fonts/LiberationSans-BoldItalic.ttf` | Red Hat / Google (Liberation 2.x) | https://github.com/liberationfonts | OFL-1.1 (`assets/fonts/OFL-Liberation.txt`) | Metric-compatible with Arial, Times New Roman, Courier New |
+| `assets/fonts/LiberationSerif-Regular.ttf` | Red Hat / Google (Liberation 2.x) | https://github.com/liberationfonts | OFL-1.1 (`assets/fonts/OFL-Liberation.txt`) | Metric-compatible with Arial, Times New Roman, Courier New |
+| `assets/fonts/LiberationSerif-Bold.ttf` | Red Hat / Google (Liberation 2.x) | https://github.com/liberationfonts | OFL-1.1 (`assets/fonts/OFL-Liberation.txt`) | Metric-compatible with Arial, Times New Roman, Courier New |
+| `assets/fonts/LiberationSerif-Italic.ttf` | Red Hat / Google (Liberation 2.x) | https://github.com/liberationfonts | OFL-1.1 (`assets/fonts/OFL-Liberation.txt`) | Metric-compatible with Arial, Times New Roman, Courier New |
+| `assets/fonts/LiberationSerif-BoldItalic.ttf` | Red Hat / Google (Liberation 2.x) | https://github.com/liberationfonts | OFL-1.1 (`assets/fonts/OFL-Liberation.txt`) | Metric-compatible with Arial, Times New Roman, Courier New |
+| `assets/fonts/LiberationMono-Regular.ttf` | Red Hat / Google (Liberation 2.x) | https://github.com/liberationfonts | OFL-1.1 (`assets/fonts/OFL-Liberation.txt`) | Metric-compatible with Arial, Times New Roman, Courier New |
+| `assets/fonts/LiberationMono-Bold.ttf` | Red Hat / Google (Liberation 2.x) | https://github.com/liberationfonts | OFL-1.1 (`assets/fonts/OFL-Liberation.txt`) | Metric-compatible with Arial, Times New Roman, Courier New |
+| `assets/fonts/LiberationMono-Italic.ttf` | Red Hat / Google (Liberation 2.x) | https://github.com/liberationfonts | OFL-1.1 (`assets/fonts/OFL-Liberation.txt`) | Metric-compatible with Arial, Times New Roman, Courier New |
+| `assets/fonts/LiberationMono-BoldItalic.ttf` | Red Hat / Google (Liberation 2.x) | https://github.com/liberationfonts | OFL-1.1 (`assets/fonts/OFL-Liberation.txt`) | Metric-compatible with Arial, Times New Roman, Courier New |
+| `assets/fonts/Poppins-Light.ttf` | Indian Type Foundry | https://github.com/itfoundry/Poppins | OFL-1.1 (`assets/fonts/OFL-Poppins.txt`) | Google Font |
+| `assets/fonts/Poppins-LightItalic.ttf` | Indian Type Foundry | https://github.com/itfoundry/Poppins | OFL-1.1 (`assets/fonts/OFL-Poppins.txt`) | Google Font |
+| `assets/fonts/Poppins-Regular.ttf` | Indian Type Foundry | https://github.com/itfoundry/Poppins | OFL-1.1 (`assets/fonts/OFL-Poppins.txt`) | Google Font |
+| `assets/fonts/Poppins-Italic.ttf` | Indian Type Foundry | https://github.com/itfoundry/Poppins | OFL-1.1 (`assets/fonts/OFL-Poppins.txt`) | Google Font |
+| `assets/fonts/Poppins-Medium.ttf` | Indian Type Foundry | https://github.com/itfoundry/Poppins | OFL-1.1 (`assets/fonts/OFL-Poppins.txt`) | Google Font |
+| `assets/fonts/Poppins-MediumItalic.ttf` | Indian Type Foundry | https://github.com/itfoundry/Poppins | OFL-1.1 (`assets/fonts/OFL-Poppins.txt`) | Google Font |
+| `assets/fonts/Poppins-Bold.ttf` | Indian Type Foundry | https://github.com/itfoundry/Poppins | OFL-1.1 (`assets/fonts/OFL-Poppins.txt`) | Google Font |
+| `assets/fonts/Poppins-BoldItalic.ttf` | Indian Type Foundry | https://github.com/itfoundry/Poppins | OFL-1.1 (`assets/fonts/OFL-Poppins.txt`) | Google Font |
+| `assets/fonts/Lora-Variable.ttf` | Cyreal | https://github.com/cyrealtype/Lora-Cyrillic | OFL-1.1 (`assets/fonts/OFL-Lora.txt`) | Google Font (variable) |
+| `assets/fonts/Lora-Italic-Variable.ttf` | Cyreal | https://github.com/cyrealtype/Lora-Cyrillic | OFL-1.1 (`assets/fonts/OFL-Lora.txt`) | Google Font (variable) |
+| `assets/fonts/OFL-Carlito.txt` | (licence text) | upstream project | — |  |
+| `assets/fonts/OFL-Caladea.txt` | (licence text) | upstream project | — |  |
+| `assets/fonts/OFL-Liberation.txt` | (licence text) | upstream project | — |  |
+| `assets/fonts/OFL-Poppins.txt` | (licence text) | upstream project | — |  |
+| `assets/fonts/OFL-Lora.txt` | (licence text) | upstream project | — |  |
