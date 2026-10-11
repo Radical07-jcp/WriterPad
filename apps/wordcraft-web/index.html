@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>WordCraft</title>
+  <meta name="description" content="WordCraft: an open-source word processor that reads and writes .docx, in your browser.">
+  <meta name="theme-color" content="#2b47b5">
+  <!-- Install on iPadOS: Share > Add to Home Screen -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="WordCraft">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <!-- Licences and third-party notices ship with this site -->
+  <link rel="license" href="licenses/index.html">
+  <link data-trunk rel="copy-file" href="pwa/manifest.webmanifest" />
+  <link data-trunk rel="copy-file" href="pwa/sw.js" />
+  <link data-trunk rel="copy-file" href="pwa/icon-180.png" />
+  <link data-trunk rel="copy-file" href="pwa/icon-192.png" />
+  <link data-trunk rel="copy-file" href="pwa/icon-512.png" />
+  <link data-trunk rel="copy-file" href="pwa/icon-maskable-512.png" />
+  <link data-trunk rel="rust" data-bin="wordcraft-web" data-wasm-opt="z" data-weak-refs />
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #e6e6e6;
+      overscroll-behavior: none; -webkit-text-size-adjust: 100%; -webkit-touch-callout: none; }
+    #wordcraft_canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+    #wordcraft_loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      color: #555; font: 14px system-ui, sans-serif; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <canvas id="wordcraft_canvas"></canvas>
+  <div id="wordcraft_loading">Loading WordCraft&hellip;</div>
+  <script>
+    if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+      window.addEventListener("load", function () { navigator.serviceWorker.register("./sw.js").catch(function () {}); });
+    }
+  </script>
+</body>
+</html>

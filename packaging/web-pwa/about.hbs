@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WordCraft: third-party Rust crate licences</title>
+<style>body{font:15px/1.5 system-ui,sans-serif;max-width:60rem;margin:2rem auto;padding:0 1rem}pre{white-space:pre-wrap;background:#f4f4f4;padding:.75rem;border-radius:6px;font-size:12px}li{margin:.15rem 0}</style></head>
+<body>
+<h1>Third-party Rust crates in this build</h1>
+<h2>Licences used</h2>
+<ul>{{#each overview}}<li><a href="#{{id}}">{{name}}</a> ({{count}})</li>{{/each}}</ul>
+<h2>Licence texts</h2>
+<ul class="licenses-list">
+{{#each licenses}}
+<li class="license"><h3 id="{{id}}">{{name}}</h3>
+<h4>Used by:</h4>
+<ul>{{#each used_by}}<li><a href="{{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}}">{{crate.name}} {{crate.version}}</a></li>{{/each}}</ul>
+<pre>{{text}}</pre></li>
+{{/each}}
+</ul></body></html>
