@@ -13,11 +13,13 @@ mod package;
 mod read;
 mod units;
 mod write;
+mod xlsx;
 mod xml;
 
 pub use crypt::{DEFAULT_SPIN_COUNT, MAX_PASSWORD_CHARS, check_password, decrypt, encrypt, encrypt_with_spin_count, is_encrypted};
 pub use read::read;
 pub use write::{write, write_as};
+pub use xlsx::xlsx_to_csv;
 
 /// What [`DocxError::PasswordRequired`] says.
 pub const PASSWORD_REQUIRED: &str = "this document is protected with a password";

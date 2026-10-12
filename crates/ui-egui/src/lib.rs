@@ -70,6 +70,9 @@ pub struct Services {
     /// Web: hand bytes to the browser as a download. An error means no download started (the
     /// browser can't tell the page whether the user then kept the file).
     pub download: Option<Box<dyn Fn(&str, &[u8]) -> Result<(), String>>>,
+    /// Web: keep an automatic copy of the document in the browser's own storage (IndexedDB), the
+    /// way AutoSave keeps a file up to date elsewhere. Save still downloads.
+    pub local_save: Option<Box<dyn Fn(&str, &[u8])>>,
     /// Web: told whether the document has unsaved changes after each pass, for the browser's
     /// leave-page guard (`beforeunload` runs between frames and can't ask the app).
     pub on_dirty: Option<Box<dyn Fn(bool)>>,
@@ -205,6 +208,8 @@ pub struct WordApp {
     pub autosave: bool,
     pub word_count: (u64, usize),
     last_autosave: f64,
+    /// The last copy handed to [`Services::local_save`], to skip identical ones.
+    local_copy: Vec<u8>,
     /// The tab shown before the Equation tab came up (restored when editing ends).
     pub(crate) equation_prev_tab: Option<String>,
     /// Zotero commands in flight (`ui.zotero.*`).
@@ -276,6 +281,7 @@ impl WordApp {
             autosave: true,
             word_count: (0, 0),
             last_autosave: 0.0,
+            local_copy: Vec::new(),
             equation_prev_tab: None,
             zotero: zotero::ZoteroLink::default(),
             ctx: None,
@@ -683,6 +689,7 @@ impl WordApp {
             // page; this is the button on it, and the one programmatic call that opens system UI
             // here, like `ui.openFileDialog` — only when the host can print.
             "ui.print" => return Some(self.print_to_system()),
+            "ui.mergePdf" => return Some(self.merge_to_pdf(&params)),
             "ui.discord" => {
                 self.canvas.open_url = Some("https://discord.gg/artcraft".into());
                 json!({})
@@ -870,6 +877,9 @@ impl WordApp {
     /// user saved to in this session, in a format that keeps everything, and never in the browser
     /// (a page can't write to the user's files; saving there is a download, #176).
     pub fn autosave_block(&self) -> Option<AutoSaveBlock> {
+        if self.services.local_save.is_some() {
+            return None; // the browser keeps its own copy; no file or saved document needed
+        }
         if self.services.download.is_some() {
             return Some(AutoSaveBlock::Browser);
         }
@@ -882,6 +892,28 @@ impl WordApp {
             return Some(AutoSaveBlock::NotSavedHere);
         }
         None
+    }
+
+    /// Mailings › Finish & Merge › Download as PDF: merge every record into one PDF and download it,
+    /// leaving the template as it is.
+    fn merge_to_pdf(&mut self, params: &Value) -> Result<Value, String> {
+        if self.session.merge.rows.is_empty() {
+            return Err("Choose recipients first (Mailings › Select Recipients).".into());
+        }
+        let (doc, count) = wordcraft_engine::cmd::mailings::merged_document(&self.session, params).map_err(|e| e.to_string())?;
+        let name = format!("{}-merged.pdf", self.title_stem());
+        let bytes = wordcraft_engine::io::save_bytes(&name, &doc)?;
+        let Some(download) = &self.services.download else {
+            return Err("Download as PDF is only available in the web app. Use Finish & Merge, then Export PDF.".into());
+        };
+        download(&name, &bytes)?;
+        self.status(format!("Merged {count} record(s) into {name}"));
+        Ok(json!({"downloaded": name, "records": count}))
+    }
+
+    /// The web app keeps an automatic copy in browser storage instead of writing a file.
+    pub fn browser_autosave(&self) -> bool {
+        self.services.local_save.is_some()
     }
 
     /// Whether AutoSave covers the document: it is on and nothing blocks it ([`Self::autosave_block`]).
@@ -905,6 +937,22 @@ impl WordApp {
     /// AutoSave: write a saved document a couple of seconds after the last change. A failure is
     /// shown in the status bar and turns AutoSave off for the file until the user saves it again.
     fn autosave_tick(&mut self, now: f64) {
+        // Web: a recovery copy in the browser's storage. The document stays "unsaved" (Save downloads).
+        if let Some(store) = &self.services.local_save {
+            if self.autosave && self.session.dirty && now - self.last_autosave > 2500.0 && now - self.canvas.caret_visible_since > 1500.0 {
+                self.last_autosave = now;
+                let name = self.default_save_name();
+                match wordcraft_engine::io::save_bytes(&name, &self.session.doc) {
+                    Ok(bytes) if bytes != self.local_copy => {
+                        store(&name, &bytes);
+                        self.local_copy = bytes;
+                    }
+                    Ok(_) => self.last_autosave = now + 12_000.0, // unchanged: look again later
+                    Err(e) => log::warn!("browser AutoSave failed: {e}"),
+                }
+            }
+            return;
+        }
         if self.autosaves() && self.session.dirty && now - self.last_autosave > 2500.0 && now - self.canvas.caret_visible_since > 1500.0 {
             self.last_autosave = now;
             if let Err(e) = self.session.run("file.save", &json!({})) {
@@ -983,10 +1031,20 @@ impl WordApp {
         for (name, bytes) in files {
             let lower = name.to_ascii_lowercase();
             let img = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"].iter().any(|e| lower.ends_with(e));
-            let list =
-                lower.ends_with(".csv") || lower.ends_with(".tsv") || (lower.ends_with(".txt") && std::mem::take(&mut self.recipient_list_pending));
+            let list = lower.ends_with(".csv")
+                || lower.ends_with(".tsv")
+                || lower.ends_with(".xlsx")
+                || (lower.ends_with(".txt") && std::mem::take(&mut self.recipient_list_pending));
             let r = if list {
-                self.load_recipients(json!({"csv": wordcraft_engine::io::decode_text(&bytes)}))
+                // An Excel workbook is read as its first sheet; everything else is text.
+                let text = if lower.ends_with(".xlsx") { wordcraft_engine::io::xlsx_to_csv(&bytes) } else { Ok(wordcraft_engine::io::decode_text(&bytes)) };
+                match text {
+                    Ok(csv) => self.load_recipients(json!({"csv": csv})),
+                    Err(e) => {
+                        self.status(format!("Couldn't read {name}: {e}"));
+                        Err(e)
+                    }
+                }
             } else if img {
                 self.insert_or_change_picture(json!({"data": wordcraft_engine::cmd::insert::base64_encode(&bytes)}))
             } else {
@@ -2139,6 +2197,24 @@ mod tests {
         assert!(!a.autosaves());
         let err = a.run("file.autosave", json!({"value": true})).unwrap_err();
         assert!(err.contains("browser"), "{err}");
+    }
+
+    /// The web app keeps a recovery copy in browser storage, so AutoSave is available there.
+    #[test]
+    fn browser_autosave_keeps_a_copy_in_browser_storage() {
+        let kept = std::rc::Rc::new(std::cell::RefCell::new(Vec::<(String, usize)>::new()));
+        let k = kept.clone();
+        let services = Services {
+            download: Some(Box::new(|_: &str, _: &[u8]| Ok(()))),
+            local_save: Some(Box::new(move |n: &str, b: &[u8]| k.borrow_mut().push((n.to_string(), b.len())))),
+            ..Default::default()
+        };
+        let mut a = WordApp::new(Session::new(wordcraft_doc::Document::new()), services);
+        assert_eq!(a.autosave_block(), None);
+        a.run("text.insert", json!({"text": "Hello"})).unwrap();
+        a.autosave_tick(now_ms() + 10_000.0);
+        assert_eq!(kept.borrow().len(), 1);
+        assert!(a.session.dirty, "a download is still pending");
     }
 
     /// Cancelling the Open picker (Mod+O) left the document as it was but turned AutoSave off.

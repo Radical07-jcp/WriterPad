@@ -78,9 +78,17 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
                 ui.painter().rect(r, 8.0, fill, Stroke::new(1.0, stroke), egui::StrokeKind::Inside);
                 let knob = if on { r.max.x - 8.0 } else { r.min.x + 8.0 };
                 ui.painter().circle_filled(pos2(knob, r.center().y), 5.0, knob_fill);
-                let tip = block
-                    .as_ref()
-                    .map_or_else(|| tl!("AutoSave saves every change to the file (needs a saved document)").to_string(), |b| b.reason());
+                let browser = app.browser_autosave();
+                let tip = block.as_ref().map_or_else(
+                    || {
+                        if browser {
+                            "AutoSave keeps a copy in this browser as you type. Save downloads a .docx.".to_string()
+                        } else {
+                            tl!("AutoSave saves every change to the file (needs a saved document)").to_string()
+                        }
+                    },
+                    |b| b.reason(),
+                );
                 if resp.on_hover_text(tip).clicked() {
                     match block {
                         None => {

@@ -208,6 +208,21 @@ pub enum Dialog {
         fields: Vec<String>,
         address: Value,
     },
+    /// Review › Spelling & Grammar (F7), or a tap on an underlined word: the problem, its
+    /// suggestions, and Change / Ignore / Ignore All / Add to Dictionary, then the next one.
+    Proofing {
+        text: String,
+        kind: String,
+        message: String,
+        suggestions: Vec<String>,
+        done: bool,
+    },
+    /// Review › Thesaurus: related words for the word at the caret; picking one replaces the word.
+    Thesaurus {
+        word: String,
+        original: String,
+        synonyms: Vec<String>,
+    },
     /// Mailings › Check for Errors: merge fields the recipient list doesn't have.
     CheckErrors {
         unknown: Vec<String>,
@@ -645,6 +660,8 @@ impl Dialog {
             Dialog::MergeRule { .. } => "ruleIf",
             Dialog::MatchFields { .. } => "matchFields",
             Dialog::CheckErrors { .. } => "checkErrors",
+            Dialog::Thesaurus { .. } => "thesaurus",
+            Dialog::Proofing { .. } => "proofing",
             Dialog::TableProperties { .. } => "tableProperties",
             Dialog::Password { .. } => "password",
             Dialog::EncryptPassword { .. } => "encryptPassword",
@@ -662,6 +679,12 @@ impl Dialog {
             "mailings.matchFields" => {
                 Some(Dialog::MatchFields { fields: strings("fields"), address: v.get("address").cloned().unwrap_or(Value::Null) })
             }
+            "review.spelling" => Some(Dialog::proofing_from(v)),
+            "review.thesaurus" => Some(Dialog::Thesaurus {
+                word: v.get("word").and_then(Value::as_str).unwrap_or("").to_string(),
+                original: v.get("original").and_then(Value::as_str).unwrap_or("").to_string(),
+                synonyms: strings("synonyms"),
+            }),
             "mailings.checkErrors" => {
                 Some(Dialog::CheckErrors { unknown: strings("unknownFields"), records: v.get("records").and_then(Value::as_u64).unwrap_or(0) })
             }
@@ -897,6 +920,20 @@ pub fn table_grid_picker(ui: &mut Ui, app: &mut WordApp) {
     }
 }
 
+impl Dialog {
+    /// The Spelling & Grammar dialog for an issue as `review.spelling` / `review.suggestions` return it.
+    pub(crate) fn proofing_from(v: &Value) -> Dialog {
+        let get = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+        Dialog::Proofing {
+            text: get("text"),
+            kind: get("kind"),
+            message: get("message"),
+            suggestions: v.get("suggestions").and_then(Value::as_array).map(|a| a.iter().filter_map(|s| s.as_str().map(str::to_string)).collect()).unwrap_or_default(),
+            done: v.get("done").and_then(Value::as_bool).unwrap_or(false),
+        }
+    }
+}
+
 pub fn show(app: &mut WordApp, ctx: &egui::Context) {
     let Some(mut d) = app.dialog.take() else { return };
     let mut open = true;
@@ -933,6 +970,8 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
         Dialog::MergeRule { .. } => "If…Then…Else",
         Dialog::MatchFields { .. } => "Match Fields",
         Dialog::CheckErrors { .. } => "Check for Errors",
+        Dialog::Thesaurus { .. } => "Thesaurus",
+        Dialog::Proofing { .. } => "Spelling & Grammar",
         Dialog::TableProperties { .. } => "Table Properties",
         Dialog::Password { .. } => "Password",
         Dialog::EncryptPassword { .. } => "Encrypt with Password",
@@ -954,6 +993,23 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
     } else {
         app.canvas.want_focus = true;
     }
+}
+
+/// Replace the word at the caret with `w` (capitalised when the original was), as the context
+/// menu's Synonyms list does.
+fn replace_word_with(app: &mut WordApp, w: &str, capitalize: bool) {
+    let w = if capitalize {
+        let mut c = w.chars();
+        c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+    } else {
+        w.to_string()
+    };
+    let _ = app.run("select.word", json!({}));
+    let (a, b) = app.session.sel.ordered();
+    let trimmed = app.session.doc.para_at(&a).and_then(|p| p.text.get(a.off..b.off)).map(|t| t.trim_end().len()).unwrap_or(0);
+    let end = wordcraft_doc::Pos { off: a.off + trimmed, ..b };
+    app.session.sel = wordcraft_engine::Selection { anchor: a, focus: end };
+    let _ = app.run("text.insert", json!({"text": w, "raw": true}));
 }
 
 pub(crate) fn buttons(ui: &mut Ui, ok: &str) -> (bool, bool) {
@@ -1852,6 +1908,100 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             }
             let (ok, cancel) = buttons(ui, tl!("Close"));
             ok || cancel
+        }
+        Dialog::Proofing { text, kind, message, suggestions, done } => {
+            let mut act: Option<(&'static str, String)> = None;
+            if *done {
+                ui.label("The spelling and grammar check is complete.");
+            } else {
+                let what = if kind.as_str() == "grammar" { "Grammar" } else { "Not in dictionary" };
+                ui.label(egui::RichText::new(what).weak());
+                ui.label(egui::RichText::new(text.as_str()).strong().size(18.0));
+                if !message.is_empty() {
+                    ui.label(message.as_str());
+                }
+                ui.add_space(4.0);
+                if suggestions.is_empty() {
+                    ui.label(egui::RichText::new("No suggestions.").weak());
+                } else {
+                    ui.label("Change to:");
+                    ui.horizontal_wrapped(|ui| {
+                        for s in suggestions.iter() {
+                            if ui.button(s.as_str()).clicked() {
+                                act = Some(("apply", s.clone()));
+                            }
+                        }
+                    });
+                }
+                ui.add_space(6.0);
+                ui.horizontal_wrapped(|ui| {
+                    if ui.button("Ignore").clicked() {
+                        act = Some(("next", String::new()));
+                    }
+                    if ui.button("Ignore All").clicked() {
+                        act = Some(("ignoreAll", String::new()));
+                    }
+                    if ui.button("Add to Dictionary").clicked() {
+                        act = Some(("add", String::new()));
+                    }
+                });
+            }
+            if let Some((cmd, arg)) = act {
+                match cmd {
+                    "apply" => {
+                        let _ = app.run("review.applySuggestion", json!({"text": arg}));
+                    }
+                    "ignoreAll" => {
+                        let _ = app.run("review.ignoreAll", json!({}));
+                    }
+                    "add" => {
+                        let _ = app.run("review.addToDictionary", json!({}));
+                    }
+                    _ => {}
+                }
+                // On to the next problem in the document.
+                if let Ok(v) = app.session.run("review.spelling", &json!({})) {
+                    if let Dialog::Proofing { text: t, kind: k, message: m, suggestions: s, done: d } = Dialog::proofing_from(&v) {
+                        *text = t;
+                        *kind = k;
+                        *message = m;
+                        *suggestions = s;
+                        *done = d;
+                    }
+                }
+                false
+            } else {
+                let (ok, cancel) = buttons(ui, tl!("Close"));
+                ok || cancel
+            }
+        }
+        Dialog::Thesaurus { word, original, synonyms } => {
+            let mut picked: Option<String> = None;
+            if word.is_empty() {
+                ui.label("Put the caret in a word first, then open the Thesaurus.");
+            } else if synonyms.is_empty() {
+                ui.label(format!("No synonyms found for \u{201c}{original}\u{201d}."));
+            } else {
+                ui.label(format!("Synonyms for \u{201c}{original}\u{201d}. Tap one to replace the word:"));
+                ui.set_min_width(300.0);
+                egui::ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        for s in synonyms.iter() {
+                            if ui.button(s).clicked() {
+                                picked = Some(s.clone());
+                            }
+                        }
+                    });
+                });
+            }
+            if let Some(w) = picked {
+                let cap = original.chars().next().is_some_and(char::is_uppercase);
+                replace_word_with(app, &w, cap);
+                true
+            } else {
+                let (ok, cancel) = buttons(ui, tl!("Close"));
+                ok || cancel
+            }
         }
         Dialog::CheckErrors { unknown, records } => {
             if unknown.is_empty() {

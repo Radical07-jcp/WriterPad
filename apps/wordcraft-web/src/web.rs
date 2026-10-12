@@ -11,7 +11,7 @@ use wordcraft_ui_egui::{Inbox, Services, UiState, WordApp};
 const FONT_EXTS: &[&str] = &["ttf", "otf", "ttc", "otc"];
 const DOC_EXTS: &[&str] = &["ttf", "otf", "ttc", "otc", "docx", "docm", "dotx", "dotm", "doc", "dot", "odt", "rtf", "txt", "md", "html", "htm", "tex", "json"];
 const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp"];
-const RECIPIENT_EXTS: &[&str] = &["csv", "tsv", "txt"];
+const RECIPIENT_EXTS: &[&str] = &["csv", "tsv", "txt", "xlsx"];
 const CANVAS_ID: &str = "wordcraft_canvas";
 const LOADING_ID: &str = "wordcraft_loading";
 
@@ -52,7 +52,10 @@ pub fn start() {
                     }
                     let doc = if query().contains("sample") { wordcraft_engine::sample::sample_document() } else { wordcraft_doc::Document::new() };
                     let mut app = WordApp::new(Session::new(doc), services(inbox.clone(), cc.egui_ctx.clone(), dirty));
-                    app.autosave = false;
+                    // AutoSave keeps a recovery copy in this browser (on unless it was switched off).
+                    let auto_on = store_get("autosave").ok().flatten().is_none_or(|v| v != "0");
+                    app.autosave = auto_on;
+                    app.session.autosave = auto_on;
                     app.touch_device = coarse_pointer();
                     let mut saved = String::new();
                     if let Ok(Some(json)) = store_get("config")
@@ -61,7 +64,12 @@ pub fn start() {
                         app.apply_prefs(ui);
                         saved = json;
                     }
-                    Ok(Box::new(WebShell { app, inbox, saved, last_check: 0.0 }))
+                    // Reopen the document that was being edited when the page was last closed.
+                    if let (Ok(Some(name)), Ok(Some(bytes))) = (store_doc_name(), store_doc_bytes()) {
+                        let data = wordcraft_engine::cmd::insert::base64_encode(&bytes.to_vec());
+                        let _ = app.run("file.open", serde_json::json!({"path": name, "data": data}));
+                    }
+                    Ok(Box::new(WebShell { app, inbox, saved, last_check: 0.0, auto_on }))
                 }),
             )
             .await;
@@ -94,6 +102,8 @@ struct WebShell {
     /// The settings JSON last written to IndexedDB, and when the app last checked (seconds).
     saved: String,
     last_check: f64,
+    /// The AutoSave switch as last written to IndexedDB.
+    auto_on: bool,
 }
 
 #[wasm_bindgen::prelude::wasm_bindgen]
@@ -104,6 +114,12 @@ extern "C" {
     fn store_set(key: &str, value: &str) -> Result<(), wasm_bindgen::JsValue>;
     #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = wpStore, js_name = putFont, catch)]
     fn store_put_font(name: &str, bytes: &[u8]) -> Result<(), wasm_bindgen::JsValue>;
+    #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = wpStore, js_name = putDoc, catch)]
+    fn store_put_doc(name: &str, bytes: &[u8]) -> Result<(), wasm_bindgen::JsValue>;
+    #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = wpStore, js_name = docName, catch)]
+    fn store_doc_name() -> Result<Option<String>, wasm_bindgen::JsValue>;
+    #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = wpStore, js_name = docBytes, catch)]
+    fn store_doc_bytes() -> Result<Option<js_sys::Uint8Array>, wasm_bindgen::JsValue>;
     #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = wpStore, js_name = fonts, catch)]
     fn store_fonts() -> Result<js_sys::Array, wasm_bindgen::JsValue>;
 }
@@ -167,6 +183,10 @@ impl eframe::App for WebShell {
         let now = ctx.input(|i| i.time);
         if now - self.last_check >= 1.0 {
             self.last_check = now;
+            if self.app.autosave != self.auto_on {
+                self.auto_on = self.app.autosave;
+                let _ = store_set("autosave", if self.auto_on { "1" } else { "0" });
+            }
             if let Ok(json) = serde_json::to_string(&self.app.prefs())
                 && json != self.saved
             {
@@ -258,6 +278,9 @@ fn services(inbox: Inbox, ctx: egui::Context, dirty: Rc<Cell<bool>>) -> Services
         pick_save: Some(Box::new(|name: &str| Some(name.to_string()))),
         download: Some(Box::new(download)),
         print: Some(Box::new(print_pdf)),
+        local_save: Some(Box::new(|name: &str, bytes: &[u8]| {
+            let _ = store_put_doc(name, bytes);
+        })),
         inbox: Some(inbox),
         on_dirty: Some(Box::new(move |d| dirty.set(d))),
         ..Default::default()

@@ -22,6 +22,14 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: trunk,cargo-about
+      - name: Bigger thesaurus (Moby Thesaurus II, public domain) - optional, keeps the built-in list if it fails
+        continue-on-error: true
+        run: |
+          curl -fsSL https://www.gutenberg.org/files/3202/files.zip -o /tmp/moby.zip
+          unzip -oq /tmp/moby.zip -d /tmp/moby
+          f=$(find /tmp/moby -iname 'mthesaur.txt' | head -1)
+          test -n "$f"
+          python3 packaging/thesaurus/make_thesaurus.py "$f" assets/thesaurus/thesaurus.txt 25
       - run: packaging/web-pwa/build.sh
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -28,7 +28,7 @@ pub fn shortcut_text(app: &WordApp, id: &str) -> String {
 fn tooltip(app: &WordApp, resp: Response, label: &str, id: &str) -> Response {
     let sc = shortcut_text(app, id);
     let desc = app.session.registry.get(id).map(|s| crate::i18n::location(s.location)).unwrap_or_default();
-    let enabled = app.session.registry.get(id).map(|s| (s.enabled)(&app.session).is_none()).unwrap_or(true);
+    let why = disabled_reason(app, id);
     resp.on_hover_ui(|ui| {
         ui.set_max_width(260.0);
         if sc.is_empty() {
@@ -39,10 +39,29 @@ fn tooltip(app: &WordApp, resp: Response, label: &str, id: &str) -> Response {
         if !desc.is_empty() {
             ui.label(egui::RichText::new(desc).small().weak());
         }
-        if !enabled {
-            ui.label(egui::RichText::new(tl!("Not available right now")).small().weak());
+        if let Some(why) = &why {
+            ui.label(egui::RichText::new(why).small().weak());
         }
     })
+}
+
+/// Why a command can't run right now, for the tooltip and the status bar; `None` when it can.
+fn disabled_reason(app: &WordApp, id: &str) -> Option<String> {
+    match app.session.registry.get(id) {
+        Some(s) => (s.enabled)(&app.session).map(|r| {
+            let mut c = r.chars();
+            c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+        }),
+        None if id.starts_with("ui.") => None,
+        None => Some("Not built into this app yet".to_string()),
+    }
+}
+
+/// A tap on a greyed-out button says why (hover tooltips don't exist on a touch screen).
+fn explain_disabled(app: &mut WordApp, id: &str) {
+    if let Some(why) = disabled_reason(app, id) {
+        app.status(why);
+    }
 }
 
 /// Record a keytip badge over a control's rect when keytips are showing commands. `ui` reaches
@@ -133,6 +152,8 @@ fn big_button(ui: &mut Ui, app: &mut WordApp, icon: &str, label: &str, id: &str,
     let resp = tooltip(app, resp, &label.replace('\n', " "), id);
     if resp.clicked() && on && !menu {
         let _ = app.run(id, params);
+    } else if resp.clicked() && !on && !menu {
+        explain_disabled(app, id);
     }
     resp
 }
@@ -155,6 +176,8 @@ pub fn small(ui: &mut Ui, app: &mut WordApp, icon: &str, label: Option<&str>, ti
     let resp = tooltip(app, resp, tip, id);
     if resp.clicked() && on {
         let _ = app.run(id, params);
+    } else if resp.clicked() {
+        explain_disabled(app, id);
     }
     resp
 }

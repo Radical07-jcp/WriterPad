@@ -1153,6 +1153,14 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
     {
         return;
     }
+    // Touch has no right-click: tapping an underlined word opens Spelling & Grammar for it.
+    if app.touch_device && resp.clicked() && app.dialog.is_none() && app.session.sel.is_collapsed() {
+        if let Ok(v) = app.session.run("review.suggestions", &json!({})) {
+            if !v.is_null() {
+                app.dialog = Some(crate::dialogs::Dialog::proofing_from(&v));
+            }
+        }
+    }
     if app.ribbon_peek && resp.contains_pointer() && ui.input(|i| i.pointer.primary_pressed()) {
         app.ribbon_peek = false;
     }

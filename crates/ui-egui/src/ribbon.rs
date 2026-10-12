@@ -1059,7 +1059,10 @@ fn mailings(app: &mut WordApp, ui: &mut Ui) {
         });
     });
     group(ui, "Finish", None, app, |ui, app| {
-        big(ui, app, "finish", "Finish &\nMerge", "mailings.finish", json!({}), false);
+        menu_button(ui, app, "finish", Some("Finish &\nMerge"), "Finish & Merge", true, |ui, app| {
+            mi(ui, app, "Edit Individual Documents…", "mailings.finish", json!({}));
+            mi(ui, app, "Download Merged File as PDF", "ui.mergePdf", json!({}));
+        });
     });
 }
 

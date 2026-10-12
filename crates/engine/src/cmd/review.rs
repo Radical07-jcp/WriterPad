@@ -684,50 +684,55 @@ fn suggestions(s: &mut Session, v: &Value) -> CmdResult {
     }
 }
 
-/// A tiny built-in thesaurus of common words (our own list).
+/// The thesaurus word list (`assets/thesaurus/thesaurus.txt`): one line per word, `root,related,related,`
+/// (the Moby Thesaurus line format). `packaging/thesaurus/make_thesaurus.py` builds a large one.
+const THESAURUS: &str = include_str!("../../../../assets/thesaurus/thesaurus.txt");
+
+/// Related words for `word` (lower case), looking at simple stems too (plurals, -ed, -ing, -ly).
+fn thesaurus_lookup(word: &str) -> Vec<String> {
+    let mut keys = vec![word.to_string()];
+    for suf in ["ing", "ed", "es", "s", "ly", "er"] {
+        if let Some(stem) = word.strip_suffix(suf).filter(|s| s.len() >= 3) {
+            keys.push(stem.to_string());
+            keys.push(format!("{stem}e"));
+            if let Some(c) = stem.chars().last().filter(|_| stem.len() >= 4 && stem.chars().rev().nth(1) == stem.chars().last()) {
+                keys.push(stem[..stem.len() - c.len_utf8()].to_string());
+            }
+        }
+    }
+    for key in keys {
+        let prefix = format!("{key},");
+        if let Some(line) = THESAURUS.lines().find(|l| l.len() > prefix.len() && l.starts_with(&prefix)) {
+            let mut out: Vec<String> = Vec::new();
+            for w in line.split(',').skip(1).map(str::trim) {
+                if !w.is_empty() && !w.contains(' ') && !w.eq_ignore_ascii_case(word) && !out.iter().any(|o| o == w) {
+                    out.push(w.to_string());
+                }
+                if out.len() >= 40 {
+                    break;
+                }
+            }
+            if !out.is_empty() {
+                return out;
+            }
+        }
+    }
+    Vec::new()
+}
+
 fn thesaurus(s: &mut Session, v: &Value) -> CmdResult {
-    const T: &[(&str, &[&str])] = &[
-        ("good", &["fine", "excellent", "decent", "solid", "worthy"]),
-        ("bad", &["poor", "inferior", "faulty", "unpleasant"]),
-        ("big", &["large", "huge", "sizable", "vast", "major"]),
-        ("small", &["little", "tiny", "compact", "minor", "modest"]),
-        ("fast", &["quick", "rapid", "swift", "speedy"]),
-        ("slow", &["unhurried", "gradual", "leisurely", "sluggish"]),
-        ("happy", &["glad", "cheerful", "content", "joyful", "pleased"]),
-        ("sad", &["unhappy", "sorrowful", "downcast", "gloomy"]),
-        ("important", &["significant", "key", "vital", "essential", "major"]),
-        ("show", &["display", "reveal", "present", "demonstrate"]),
-        ("make", &["create", "build", "produce", "craft", "form"]),
-        ("use", &["employ", "apply", "utilize", "operate"]),
-        ("help", &["assist", "aid", "support", "serve"]),
-        ("start", &["begin", "launch", "open", "initiate"]),
-        ("end", &["finish", "close", "conclude", "stop"]),
-        ("say", &["state", "tell", "remark", "mention"]),
-        ("think", &["believe", "consider", "reckon", "suppose"]),
-        ("new", &["fresh", "novel", "recent", "modern"]),
-        ("old", &["aged", "former", "ancient", "vintage"]),
-        ("beautiful", &["lovely", "attractive", "gorgeous", "stunning"]),
-        ("easy", &["simple", "effortless", "straightforward"]),
-        ("hard", &["difficult", "tough", "demanding", "firm"]),
-        ("work", &["labor", "effort", "job", "task", "operate"]),
-        ("idea", &["concept", "notion", "thought", "plan"]),
-        ("change", &["alter", "modify", "adjust", "shift"]),
-        ("great", &["excellent", "superb", "terrific", "considerable"]),
-        ("very", &["extremely", "highly", "truly", "really"]),
-        ("shared", &["common", "joint", "communal", "mutual"]),
-        ("community", &["group", "society", "collective", "circle"]),
-    ];
-    let word = match p::str(v, "word") {
-        Some(w) => w.to_lowercase(),
+    let original = match p::str(v, "word") {
+        Some(w) => w.to_string(),
         None => {
             let f = s.sel.focus.clone();
             let p = s.doc.para_at(&f).ok_or_else(|| CmdError::Failed("no word".into()))?;
             let (a, b) = p.word_at(f.off);
-            p.text.get(a..b).unwrap_or("").trim().to_lowercase()
+            p.text.get(a..b).unwrap_or("").trim().to_string()
         }
     };
-    let syn = T.iter().find(|(w, _)| *w == word).map(|(_, l)| l.to_vec()).unwrap_or_default();
-    Ok(json!({"word": word, "synonyms": syn}))
+    let word = original.to_lowercase();
+    let syn = if word.is_empty() { Vec::new() } else { thesaurus_lookup(&word) };
+    Ok(json!({"word": word, "original": original, "synonyms": syn}))
 }
 
 /// Track Changes Options: change the fields given, return them all. A per-user preference.

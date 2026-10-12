@@ -497,7 +497,9 @@ const MAX_MERGED_BLOCKS: usize = 200_000;
 /// rest of a copy to the next record, and the following copy starts after it. Headers and footers
 /// are merged too: with merge fields in them, each letter becomes its own section with its own
 /// header/footer copies.
-fn finish(s: &mut Session, v: &Value) -> CmdResult {
+/// The merged document (every record, one after another) and how many records went into it. The
+/// session is left alone.
+pub fn merged_document(s: &Session, v: &Value) -> Result<(Document, usize), CmdError> {
     let n = s.merge.rows.len();
     let from = (p::u64(v, "from").unwrap_or(1).max(1) as usize).saturating_sub(1);
     let to = (p::u64(v, "to").unwrap_or(n as u64).min(n as u64)) as usize;
@@ -588,6 +590,11 @@ fn finish(s: &mut Session, v: &Value) -> CmdResult {
         }
     }
     out.ensure_nonempty();
+    Ok((out, count))
+}
+
+fn finish(s: &mut Session, v: &Value) -> CmdResult {
+    let (out, count) = merged_document(s, v)?;
     if let Some(path) = p::str(v, "path") {
         crate::io::save_path(std::path::Path::new(path), &out).map_err(CmdError::Failed)?;
         return Ok(json!({"records": count, "path": path}));

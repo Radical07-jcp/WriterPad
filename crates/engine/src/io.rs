@@ -279,6 +279,11 @@ pub fn save_path_with(path: &std::path::Path, _doc: &Document, _password: Option
 }
 
 /// UTF-8 (with or without BOM), UTF-16 with BOM, else Latin-1.
+/// The first worksheet of an .xlsx workbook as CSV text (recipient lists for mail merge).
+pub fn xlsx_to_csv(bytes: &[u8]) -> Result<String, String> {
+    wordcraft_docx::xlsx_to_csv(bytes)
+}
+
 pub fn decode_text(b: &[u8]) -> String {
     if let Some(rest) = b.strip_prefix(&[0xEF, 0xBB, 0xBF]) {
         return String::from_utf8_lossy(rest).into_owned();
