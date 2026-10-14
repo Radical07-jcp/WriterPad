@@ -689,7 +689,7 @@ impl WordApp {
             // page; this is the button on it, and the one programmatic call that opens system UI
             // here, like `ui.openFileDialog` — only when the host can print.
             "ui.print" => return Some(self.print_to_system()),
-            "ui.mergePdf" => return Some(self.merge_to_pdf(&params)),
+            "ui.mergePdf" => return Some(self.merge_to_pdf(p)),
             "ui.discord" => {
                 self.canvas.open_url = Some("https://discord.gg/artcraft".into());
                 json!({})
