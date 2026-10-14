@@ -60,7 +60,12 @@ pub struct CanvasState {
     pub last_highlight: String,
     pub last_font_color: String,
     pub last_shading: String,
+    /// Table Design › Borders: the pen used by the Borders menu and Border Painter (points, hex colour or automatic).
+    pub border_width: f32,
+    pub border_color: Option<String>,
     pub open_url: Option<String>,
+    /// A page of this site to open in the same tab (the PDF editor).
+    pub open_page: Option<String>,
     /// Screen rects of pages last frame (for the control channel: page ↔ screen coordinates).
     pub page_rects: Vec<Rect>,
     /// Effective scale (screen points per document point).
@@ -128,7 +133,10 @@ impl Default for CanvasState {
             last_highlight: "yellow".into(),
             last_font_color: "C00000".into(),
             last_shading: "FFF2CC".into(),
+            border_width: 0.5,
+            border_color: None,
             open_url: None,
+            open_page: None,
             page_rects: Vec::new(),
             scale: PX_PER_PT,
             canvas_rect: None,
@@ -1152,14 +1160,6 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
         && crate::objects::pointer(app, ui, resp, rects, layout, scale, at)
     {
         return;
-    }
-    // Touch has no right-click: tapping an underlined word opens Spelling & Grammar for it.
-    if app.touch_device && resp.clicked() && app.dialog.is_none() && app.session.sel.is_collapsed() {
-        if let Ok(v) = app.session.run("review.suggestions", &json!({})) {
-            if !v.is_null() {
-                app.dialog = Some(crate::dialogs::Dialog::proofing_from(&v));
-            }
-        }
     }
     if app.ribbon_peek && resp.contains_pointer() && ui.input(|i| i.pointer.primary_pressed()) {
         app.ribbon_peek = false;

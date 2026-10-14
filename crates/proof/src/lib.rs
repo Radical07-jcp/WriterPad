@@ -376,25 +376,7 @@ pub fn check_grammar(text: &str) -> Vec<Issue> {
             });
         }
     }
-    // Space before punctuation; doubled spaces.
-    for (i, _) in text.match_indices(" ,").chain(text.match_indices(" .")).chain(text.match_indices(" ;")) {
-        if text.get(i + 2..).is_some_and(|r| r.starts_with('.') || r.starts_with(',')) {
-            continue; // "..." or numbers like " .5"
-        }
-        v.push(Issue {
-            start: i,
-            end: i + 2,
-            kind: IssueKind::Grammar,
-            message: "Remove the space before the punctuation".into(),
-            suggestions: vec![text.get(i + 1..i + 2).unwrap_or("").to_string()],
-        });
-    }
-    for (i, _) in text.match_indices("  ") {
-        if i > 0 && text.get(..i).is_some_and(|t| t.ends_with(' ')) {
-            continue;
-        }
-        v.push(Issue { start: i, end: i + 2, kind: IssueKind::Grammar, message: "Extra space".into(), suggestions: vec![" ".into()] });
-    }
+    // Spacing (extra spaces, a space before punctuation) is deliberately not reported: people space out text by hand.
     // Sentence start capital.
     let mut after_end = true;
     for (a, b) in &ws {
@@ -476,9 +458,9 @@ mod tests {
         assert!(msgs.iter().any(|m| m.contains("Repeated")), "{msgs:?}");
         assert!(msgs.iter().any(|m| m.contains("\"an\"")), "{msgs:?}");
         assert!(msgs.iter().any(|m| m.contains("\"a\" before")), "{msgs:?}");
-        assert!(msgs.iter().any(|m| m.contains("space before")), "{msgs:?}");
         assert!(msgs.iter().any(|m| m.contains("Capitalize")), "{msgs:?}");
-        assert!(msgs.iter().any(|m| m.contains("Extra space")), "{msgs:?}");
+        assert!(!msgs.iter().any(|m| m.contains("space")), "spacing must not be flagged: {msgs:?}");
+        assert!(check_grammar("Indent    with   spaces , like this .").iter().all(|i| !i.message.contains("space")));
         assert!(check_grammar("A university is an hour away.").is_empty(), "{:?}", check_grammar("A university is an hour away."));
     }
 

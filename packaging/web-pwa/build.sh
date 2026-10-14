@@ -22,6 +22,8 @@ cp LICENSE-APACHE "$L/LICENSE-APACHE.txt"
 cp NOTICE "$L/NOTICE.txt"
 cp ATTRIBUTION.md "$L/ATTRIBUTION.md.txt"
 cp FONTS-NOTICE.md "$L/FONTS-NOTICE.txt"
+cp apps/wordcraft-web/pdf/vendor/LICENSE-pdfjs.txt "$L/PDFJS-LICENSE-Apache-2.0.txt"
+cp apps/wordcraft-web/pdf/vendor/LICENSE-pdf-lib.txt "$L/PDF-LIB-LICENSE-MIT.txt"
 # Licence texts anywhere under assets/fonts (copied flat, folder names kept in the file name) and the font list.
 mkdir -p "$L/fonts"
 find assets/fonts -type f \( -iname '*.txt' -o -iname 'LICENSE*' -o -iname 'LICENCE*' -o -iname 'OFL*' \) | while read -r f; do
@@ -37,7 +39,7 @@ cargo about generate --config packaging/web-pwa/about.toml \
 cp packaging/web/_headers "$SITE/_headers"
 cp packaging/web/.htaccess "$SITE/.htaccess"
 # The ArtCraft brand files (docs/brand) are deliberately NOT shipped.
-for f in index.html manifest.webmanifest sw.js icon-180.png licenses/index.html licenses/third-party-rust.html; do
+for f in index.html pdf/index.html pdf/app.js pdf/vendor/pdf.min.mjs pdf/vendor/pdf.worker.min.mjs pdf/vendor/pdf-lib.min.js manifest.webmanifest sw.js icon-180.png licenses/index.html licenses/third-party-rust.html; do
   [ -s "$SITE/$f" ] || { echo "error: missing $f in $SITE" >&2; exit 1; }
 done
 echo "OK: $SITE"; du -sh "$SITE"

@@ -52,6 +52,16 @@ pub fn doc_actions(app: &mut WordApp, ui: &mut Ui) {
     if resp.on_hover_text(tl!("Export a copy to share (PDF, Word document)")).clicked() {
         let _ = app.run("ui.backstage", json!({"value": true, "page": "export"}));
     }
+    // PDF editor (a page of this site): view, mark up, fill, sign and organize PDFs.
+    ui.add_space(6.0);
+    let (r, resp) = ui.allocate_exact_size(vec2(38.0, 24.0), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(r, 4.0, t.hover);
+    }
+    ui.painter().text(r.center(), Align2::CENTER_CENTER, "PDF", medium(11.5), t.text);
+    if resp.on_hover_text("Open the PDF editor").clicked() {
+        app.canvas.open_page = Some("pdf/".into());
+    }
 }
 
 /// True when the caret/selection touches a picture (#147).
@@ -884,8 +894,18 @@ fn layout(app: &mut WordApp, ui: &mut Ui) {
         });
     });
     group(ui, "Arrange", None, app, |ui, app| {
-        big(ui, app, "position", "Position", "arrange.position", json!({}), false);
-        big(ui, app, "wrapText", "Wrap\nText", "arrange.wrap", json!({}), false);
+        menu_button(ui, app, "position", Some("Position"), "Position", true, |ui, app| {
+            mi(ui, app, "In Line with Text", "arrange.wrap", json!({"wrap": "inline"}));
+            ui.separator();
+            for (label, preset) in [("Top Left", "topLeft"), ("Top Center", "topCenter"), ("Top Right", "topRight"), ("Middle Left", "middleLeft"), ("Middle Center", "middleCenter"), ("Middle Right", "middleRight"), ("Bottom Left", "bottomLeft"), ("Bottom Center", "bottomCenter"), ("Bottom Right", "bottomRight")] {
+                mi(ui, app, label, "arrange.position", json!({"preset": preset}));
+            }
+        });
+        menu_button(ui, app, "wrapText", Some("Wrap\nText"), "Wrap Text", true, |ui, app| {
+            for (label, wrap) in [("In Line with Text", "inline"), ("Square", "square"), ("Tight", "tight"), ("Through", "through"), ("Top and Bottom", "topAndBottom"), ("Behind Text", "behindText"), ("In Front of Text", "inFrontOfText")] {
+                mi(ui, app, label, "arrange.wrap", json!({"wrap": wrap}));
+            }
+        });
         stack(ui, |ui| {
             small(ui, app, "bringForward", Some("Bring Forward"), "Bring Forward", "arrange.bringForward", json!({}), false);
             small(ui, app, "sendBackward", Some("Send Backward"), "Send Backward", "arrange.sendBackward", json!({}), false);
@@ -1274,8 +1294,18 @@ fn shape_format(app: &mut WordApp, ui: &mut Ui) {
         });
     });
     group(ui, "Arrange", None, app, |ui, app| {
-        big(ui, app, "position", "Position", "arrange.position", json!({}), false);
-        big(ui, app, "wrapText", "Wrap\nText", "arrange.wrap", json!({}), false);
+        menu_button(ui, app, "position", Some("Position"), "Position", true, |ui, app| {
+            mi(ui, app, "In Line with Text", "arrange.wrap", json!({"wrap": "inline"}));
+            ui.separator();
+            for (label, preset) in [("Top Left", "topLeft"), ("Top Center", "topCenter"), ("Top Right", "topRight"), ("Middle Left", "middleLeft"), ("Middle Center", "middleCenter"), ("Middle Right", "middleRight"), ("Bottom Left", "bottomLeft"), ("Bottom Center", "bottomCenter"), ("Bottom Right", "bottomRight")] {
+                mi(ui, app, label, "arrange.position", json!({"preset": preset}));
+            }
+        });
+        menu_button(ui, app, "wrapText", Some("Wrap\nText"), "Wrap Text", true, |ui, app| {
+            for (label, wrap) in [("In Line with Text", "inline"), ("Square", "square"), ("Tight", "tight"), ("Through", "through"), ("Top and Bottom", "topAndBottom"), ("Behind Text", "behindText"), ("In Front of Text", "inFrontOfText")] {
+                mi(ui, app, label, "arrange.wrap", json!({"wrap": wrap}));
+            }
+        });
         stack(ui, |ui| {
             rotate_menu(ui, app, Some("Rotate"));
             small(ui, app, "align", Some("Align"), "Align", "arrange.align", json!({}), false);
@@ -1386,8 +1416,18 @@ fn picture_format(app: &mut WordApp, ui: &mut Ui) {
         });
     });
     group(ui, "Arrange", None, app, |ui, app| {
-        big(ui, app, "position", "Position", "arrange.position", json!({}), false);
-        big(ui, app, "wrapText", "Wrap\nText", "arrange.wrap", json!({}), false);
+        menu_button(ui, app, "position", Some("Position"), "Position", true, |ui, app| {
+            mi(ui, app, "In Line with Text", "arrange.wrap", json!({"wrap": "inline"}));
+            ui.separator();
+            for (label, preset) in [("Top Left", "topLeft"), ("Top Center", "topCenter"), ("Top Right", "topRight"), ("Middle Left", "middleLeft"), ("Middle Center", "middleCenter"), ("Middle Right", "middleRight"), ("Bottom Left", "bottomLeft"), ("Bottom Center", "bottomCenter"), ("Bottom Right", "bottomRight")] {
+                mi(ui, app, label, "arrange.position", json!({"preset": preset}));
+            }
+        });
+        menu_button(ui, app, "wrapText", Some("Wrap\nText"), "Wrap Text", true, |ui, app| {
+            for (label, wrap) in [("In Line with Text", "inline"), ("Square", "square"), ("Tight", "tight"), ("Through", "through"), ("Top and Bottom", "topAndBottom"), ("Behind Text", "behindText"), ("In Front of Text", "inFrontOfText")] {
+                mi(ui, app, label, "arrange.wrap", json!({"wrap": wrap}));
+            }
+        });
         stack(ui, |ui| {
             rotate_menu(ui, app, Some("Rotate"));
             small(ui, app, "align", Some("Align"), "Align", "arrange.align", json!({}), false);
@@ -1549,7 +1589,10 @@ fn table_design(app: &mut WordApp, ui: &mut Ui) {
         });
     });
     group(ui, "Borders", None, app, |ui, app| {
-        menu_button(ui, app, "borders", Some("Borders"), "Borders", true, |ui, app| {
+        let (bw, bc) = (app.canvas.border_width, app.canvas.border_color.clone());
+        let pen = move |kind: &str| json!({"kind": kind, "width": bw, "color": bc});
+        let pen2 = pen.clone();
+        menu_button(ui, app, "borders", Some("Borders"), "Borders", true, move |ui, app| {
             for (l, k) in [
                 ("All Borders", "all"),
                 ("Outside Borders", "outside"),
@@ -1557,11 +1600,34 @@ fn table_design(app: &mut WordApp, ui: &mut Ui) {
                 ("No Border", "none"),
                 ("Top Border", "top"),
                 ("Bottom Border", "bottom"),
+                ("Left Border", "left"),
+                ("Right Border", "right"),
             ] {
-                mi(ui, app, l, "table.borders", json!({"kind": k}));
+                mi(ui, app, l, "table.borders", pen2(k));
             }
         });
-        big(ui, app, "borderPainter", "Border\nPainter", "table.borderPainter", json!({}), false);
+        stack(ui, |ui| {
+            menu_button(ui, app, "penWeight", Some("Pen Weight"), &format!("Pen Weight ({bw} pt)"), false, |ui, app| {
+                for w in [0.25_f32, 0.5, 0.75, 1.0, 1.5, 2.25, 3.0, 4.5, 6.0] {
+                    if ui.selectable_label((app.canvas.border_width - w).abs() < 0.01, format!("{w} pt")).clicked() {
+                        app.canvas.border_width = w;
+                        ui.close();
+                    }
+                }
+            });
+            menu_button(ui, app, "penColor", Some("Pen Color"), "Pen Color", false, |ui, app| {
+                if ui.button("Automatic").clicked() {
+                    app.canvas.border_color = None;
+                    ui.close();
+                }
+                let theme = app.session.doc.settings.theme_colors.clone();
+                if let Some(hex) = color_grid(ui, &theme) {
+                    app.canvas.border_color = Some(hex);
+                    ui.close();
+                }
+            });
+        });
+        big(ui, app, "borderPainter", "Border\nPainter", "table.borderPainter", pen("all"), false);
     });
 }
 

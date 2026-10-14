@@ -120,6 +120,8 @@ extern "C" {
     fn store_doc_name() -> Result<Option<String>, wasm_bindgen::JsValue>;
     #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = wpStore, js_name = docBytes, catch)]
     fn store_doc_bytes() -> Result<Option<js_sys::Uint8Array>, wasm_bindgen::JsValue>;
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name = wpDrainKeys, catch)]
+    fn drain_keys() -> Result<js_sys::Array, wasm_bindgen::JsValue>;
     #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = wpStore, js_name = fonts, catch)]
     fn store_fonts() -> Result<js_sys::Array, wasm_bindgen::JsValue>;
 }
@@ -177,6 +179,16 @@ impl eframe::App for WebShell {
             let added = wordcraft_fonts::FontDb::global().add_font(bytes.clone());
             log::info!("font {name}: {added} face(s) installed");
             let _ = store_put_font(&name, &bytes);
+        }
+        // Tab keys the browser layer didn't turn into egui key events (iPadOS): apply them here.
+        if let Ok(keys) = drain_keys() {
+            let egui_got_tab = ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Key { key: egui::Key::Tab, pressed: true, .. })));
+            if !egui_got_tab {
+                for k in keys.iter().filter_map(|v| v.as_string()) {
+                    self.app.press_tab(k == "BackTab");
+                    ctx.request_repaint();
+                }
+            }
         }
         self.app.logic(ctx);
         // Settings (ribbon, theme, preferences) are written to IndexedDB about once a second when they change.

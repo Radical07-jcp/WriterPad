@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>WriterPad PDF</title>
+  <meta name="theme-color" content="#2b47b5">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="apple-touch-icon" href="../icon-180.png">
+  <link rel="license" href="../licenses/index.html">
+  <link rel="stylesheet" href="vendor/pdf_viewer.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="../idb.js"></script>
+  <script src="vendor/pdf-lib.min.js"></script>
+</head>
+<body>
+<header id="bar">
+  <a class="btn" id="btnHome" href="../" title="Back to WriterPad">&#8592; Word</a>
+  <button class="btn" id="btnOpen">Open</button>
+  <button class="btn" id="btnInsert" title="Insert pages from a PDF or pictures">Insert</button>
+  <button class="btn primary" id="btnSave">Save</button>
+  <span class="sep"></span>
+  <button class="btn ic" id="btnUndo" title="Undo" disabled>&#8630;</button>
+  <button class="btn ic" id="btnRedo" title="Redo" disabled>&#8631;</button>
+  <span class="sep"></span>
+  <button class="btn ic" id="btnPrev" title="Previous page">&#8249;</button>
+  <input id="pageNum" type="number" min="1" value="1" inputmode="numeric"><span id="pageCount">/ 0</span>
+  <button class="btn ic" id="btnNext" title="Next page">&#8250;</button>
+  <span class="sep"></span>
+  <button class="btn ic" id="btnZoomOut" title="Zoom out">&minus;</button>
+  <button class="btn" id="zoomLabel" title="Fit width">100%</button>
+  <button class="btn ic" id="btnZoomIn" title="Zoom in">+</button>
+  <span class="grow"></span>
+  <button class="btn" id="btnPanels" title="Pages, outline, search">&#9776; Pages</button>
+  <button class="btn" id="btnMore">More &#9662;</button>
+</header>
+
+<nav id="tools"></nav>
+<div id="propbar"></div>
+
+<main>
+  <aside id="side" hidden>
+    <div class="tabs"><button data-tab="thumbs" class="on">Pages</button><button data-tab="outline">Outline</button><button data-tab="search">Search</button></div>
+    <div id="tab-thumbs" class="tabbody">
+      <div id="pageActions"></div>
+      <div id="thumbs"></div>
+    </div>
+    <div id="tab-outline" class="tabbody" hidden></div>
+    <div id="tab-search" class="tabbody" hidden>
+      <div class="row"><input id="searchBox" type="search" placeholder="Find in document"><button class="btn" id="btnFind">Find</button></div>
+      <div id="searchInfo" class="muted"></div>
+      <div id="searchResults"></div>
+    </div>
+  </aside>
+  <section id="viewer"><div id="pages"></div><div id="empty">
+    <h2>WriterPad PDF</h2>
+    <p>Open a PDF to view, mark up, fill in forms, sign, and organize pages.</p>
+    <p><button class="btn primary big" id="btnOpen2">Open a PDF</button> <button class="btn big" id="btnFromImages">Pictures to PDF</button></p>
+    <p class="muted">Everything stays on this device.</p>
+  </div></section>
+</main>
+
+<div id="menu" class="popup" hidden></div>
+<div id="dialog" hidden><div class="card"><div id="dlgBody"></div></div></div>
+<div id="toast" hidden></div>
+<input id="fileIn" type="file" accept="application/pdf,.pdf" hidden>
+<input id="fileIns" type="file" accept="application/pdf,.pdf,image/*" multiple hidden>
+<input id="imgIn" type="file" accept="image/*" hidden>
+<script type="module" src="app.js"></script>
+</body>
+</html>

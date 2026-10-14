@@ -689,7 +689,7 @@ impl WordApp {
             // page; this is the button on it, and the one programmatic call that opens system UI
             // here, like `ui.openFileDialog` — only when the host can print.
             "ui.print" => return Some(self.print_to_system()),
-            "ui.mergePdf" => return Some(self.merge_to_pdf(p)),
+            "ui.mergePdf" => return Some(self.merge_to_pdf(&params)),
             "ui.discord" => {
                 self.canvas.open_url = Some("https://discord.gg/artcraft".into());
                 json!({})
@@ -894,6 +894,14 @@ impl WordApp {
         None
     }
 
+    /// A Tab key press the web layer didn't deliver as a key event (see `pwa/keys.js`): Tab or
+    /// Shift+Tab in the document, as the key would do.
+    pub fn press_tab(&mut self, back: bool) {
+        if self.canvas.focused && self.dialog.is_none() && self.session.math.is_none() {
+            let _ = self.run(if back { "text.backTab" } else { "text.tab" }, json!({}));
+        }
+    }
+
     /// Mailings › Finish & Merge › Download as PDF: merge every record into one PDF and download it,
     /// leaving the template as it is.
     fn merge_to_pdf(&mut self, params: &Value) -> Result<Value, String> {
@@ -1010,6 +1018,9 @@ impl WordApp {
         read_aloud::show(self, &ctx);
         crate::keytips::show(self, &ctx, ui);
         keys::global_shortcuts(self, &ctx);
+        if let Some(page) = self.canvas.open_page.take() {
+            ctx.open_url(egui::OpenUrl::same_tab(page));
+        }
         if let Some(url) = self.canvas.open_url.take() {
             ctx.open_url(egui::OpenUrl::new_tab(url));
         }
