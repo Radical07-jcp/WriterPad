@@ -47,6 +47,13 @@ pub fn start() {
                         log::info!("wordcraft-web: wgpu backend {:?}", rs.adapter.get_info().backend);
                     }
                     let inbox: Inbox = Inbox::default();
+                    // keys.js calls this to wake the app when it queues a Tab press.
+                    if let Some(win) = web_sys::window() {
+                        let repaint_ctx = cc.egui_ctx.clone();
+                        let wake = wasm_bindgen::closure::Closure::wrap(Box::new(move || repaint_ctx.request_repaint()) as Box<dyn Fn()>);
+                        let _ = js_sys::Reflect::set(&win, &"wpRepaint".into(), wake.as_ref());
+                        wake.forget();
+                    }
                     if let Err(e) = listen_for_pasted_pictures(inbox.clone(), cc.egui_ctx.clone()) {
                         log::error!("pasting pictures is unavailable: {e}");
                     }

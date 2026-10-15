@@ -93,7 +93,7 @@ const S = {
   scale: 1.2, tool: "select", sel: null, pending: null,
   undo: [], redo: [], dirty: false,
   prefs: { color: "#e53935", hl: "#fff176", width: 2, size: 14, font: "Helvetica", bold: false, italic: false, penOnly: false },
-  fields: {}, flatten: false, decor: { pn: null, header: "", footer: "", wm: null }, meta: null, searchHits: [],
+  fields: {}, flatten: false, removeOldText: true, decor: { pn: null, header: "", footer: "", wm: null }, meta: null, searchHits: [],
 };
 const PAPER = { "Letter 8.5 x 11 in": [612, 792], "Folio 8.5 x 13 in": [612, 936], "Legal 8.5 x 14 in": [612, 1008], "A4": [595.28, 841.89], "A5": [419.53, 595.28], "B5": [498.9, 708.66] };
 
@@ -430,6 +430,7 @@ async function renderEntry(entry) {
   entry.renderedKey = key;
   drawOverlay(entry);
   updateThumbFor(entry);
+  if (S.tool === "edit") ensureAnalysis(entry).then(() => drawOverlay(entry));
 }
 
 function rerenderAll() {
@@ -520,6 +521,7 @@ function objBounds(entry, o) {
     return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
   }
   if (o.t === "note") { const [x, y] = pt(vp, o.p[0], o.p[1]); return { x, y, w: 24, h: 24 }; }
+  if (o.t === "tedit") return aabb(vp, o.rect);
   let pts = [];
   if (o.t === "hl") o.rects.forEach((r) => { const a = aabb(vp, r); pts.push([a.x, a.y], [a.x + a.w, a.y + a.h]); });
   else if (o.t === "ul" || o.t === "st") o.segs.forEach((s) => pts.push(pt(vp, s[0], s[1]), pt(vp, s[2], s[3])));
@@ -539,6 +541,7 @@ function distSeg(px, py, ax, ay, bx, by) {
 function hitObj(entry, o, x, y) {
   const vp = entry.vp, tol = 10;
   if (BOXED.has(o.t)) { const f = boxFrame(entry, o); const [lx, ly] = toLocal(f, x, y); return lx >= -4 && ly >= -4 && lx <= f.w + 4 && ly <= f.h + 4; }
+  if (o.t === "tedit") { const b = aabb(vp, o.rect); return x >= b.x - 3 && x <= b.x + b.w + 3 && y >= b.y - 3 && y <= b.y + b.h + 3; }
   if (o.t === "note") { const b = objBounds(entry, o); return x >= b.x - 4 && x <= b.x + b.w + 4 && y >= b.y - 4 && y <= b.y + b.h + 4; }
   if (o.t === "hl") return o.rects.some((r) => { const a = aabb(vp, r); return x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h; });
   if (o.t === "ul" || o.t === "st") return o.segs.some((s) => { const a = pt(vp, s[0], s[1]), b = pt(vp, s[2], s[3]); return distSeg(x, y, a[0], a[1], b[0], b[1]) < tol; });
@@ -561,7 +564,7 @@ function handlesOf(entry, o) {
     const [x, y] = fromLocal(f, f.w, f.h);
     return [{ k: "br", x, y }];
   }
-  if (["rect", "ell", "line", "arrow", "redact", "white"].includes(o.t)) {
+  if (["rect", "ell", "line", "arrow", "redact", "white", "ximg"].includes(o.t)) {
     const a = pt(vp, o.a[0], o.a[1]), b = pt(vp, o.b[0], o.b[1]);
     return [{ k: "a", x: a[0], y: a[1] }, { k: "b", x: b[0], y: b[1] }];
   }
@@ -622,6 +625,18 @@ function objSvg(entry, o) {
       const t = lines.map((ln, i) => `<text x="${r2(4 * k)}" y="${r2((3 + o.size * 0.82 + i * o.size * LH) * k)}" xml:space="preserve">${esc(ln)}</text>`).join("");
       return `<g transform="translate(${r2(f.sx)} ${r2(f.sy)}) rotate(${f.rel})" font-family='${CSS_FONT[o.font || "Helvetica"]}' font-size="${r2(o.size * k)}" font-weight="${o.bold ? 700 : 400}" font-style="${o.italic ? "italic" : "normal"}" fill="${col}" style="white-space:pre">${t}</g>`;
     }
+    case "ximg": {
+      if (o.unchanged) return "";
+      const b0 = aabb(vp, o.box0), a = aabbAB(vp, o.a, o.b);
+      let sv = `<rect x="${r2(b0.x)}" y="${r2(b0.y)}" width="${r2(b0.w)}" height="${r2(b0.h)}" fill="#fff"/>`;
+      const href = IMGS.get(o.img || o.prev);
+      if (!o.del && href) sv += `<image href="${href}" x="${r2(a.x)}" y="${r2(a.y)}" width="${r2(a.w)}" height="${r2(a.h)}" preserveAspectRatio="none"/>`;
+      return sv;
+    }
+    case "tedit": {
+      const a = aabb(vp, o.rect), [bx, by] = pt(vp, o.base[0], o.base[1]);
+      return `<rect x="${r2(a.x - 1.5)}" y="${r2(a.y - 1.5)}" width="${r2(a.w + 3)}" height="${r2(a.h + 3)}" fill="${o.bg}"/><text x="${r2(bx)}" y="${r2(by)}" font-family='${CSS_FONT[o.font || "Helvetica"]}' font-size="${r2(o.size * k)}" font-weight="${o.bold ? 700 : 400}" font-style="${o.italic ? "italic" : "normal"}" fill="${o.fg}" xml:space="preserve" style="white-space:pre">${esc(o.text)}</text>`;
+    }
     case "wm": {
       const [x, y] = pt(vp, o.c[0], o.c[1]);
       return `<text transform="translate(${r2(x)} ${r2(y)}) rotate(${vp.rotation - (o.ang || 0) - 45})" text-anchor="middle" dominant-baseline="central" font-family="${CSS_FONT.Helvetica}" font-weight="700" font-size="${r2(o.size * k)}" fill="${o.color}" opacity="${o.op}">${esc(o.text)}</text>`;
@@ -638,8 +653,14 @@ function drawOverlay(entry) {
   const idx = S.pages.indexOf(entry);
   let html = "";
   for (const o of decorObjects(entry, idx, vp)) html += objSvg(entry, o);
-  for (const o of entry.edits) html += objSvg(entry, o);
+  // Replaced text goes under everything else so its cover box never hides a moved picture.
+  for (const o of entry.edits) if (o.t === "tedit") html += objSvg(entry, o);
+  for (const o of entry.edits) if (o.t !== "tedit") html += objSvg(entry, o);
   if (entry.tmp) html += objSvg(entry, entry.tmp);
+  if (S.tool === "edit") {
+    for (const m of entry.ximgs || []) { if (entry.edits.some((o) => o.t === "ximg" && o.k === m.k && !o.unchanged)) continue; const a = aabb(vp, m.bbox); html += `<rect x="${r2(a.x)}" y="${r2(a.y)}" width="${r2(a.w)}" height="${r2(a.h)}" fill="rgba(30,136,229,.06)" stroke="#1e88e5" stroke-width="1.2" stroke-dasharray="4 3"/>`; }
+    for (const l of entry.xlines || []) { const a = aabb(vp, l.rect); html += `<rect x="${r2(a.x - 1)}" y="${r2(a.y - 1)}" width="${r2(a.w + 2)}" height="${r2(a.h + 2)}" fill="rgba(67,160,71,.05)" stroke="#43a047" stroke-width="0.8" stroke-dasharray="2 3"/>`; }
+  }
   for (const h of S.searchHits) if (h.entry === entry.id) { const a = aabb(vp, h.rect); html += `<rect x="${r2(a.x)}" y="${r2(a.y)}" width="${r2(a.w)}" height="${r2(a.h)}" fill="#ffd54f" opacity="${h.cur ? 0.75 : 0.45}" style="mix-blend-mode:multiply"/>`; }
   if (entry.cropBox) { const a = aabb(vp, entry.cropBox); html += `<rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" fill="rgba(43,71,181,.12)" stroke="#2b47b5" stroke-width="2" stroke-dasharray="6 4"/>`; }
   const sel = S.sel && S.sel.entry === entry.id ? entry.edits.find((o) => o.id === S.sel.obj) : null;
@@ -685,6 +706,7 @@ function refreshButtons() {
 // ------------------------------------------------------------------ tools
 const TOOLS = [
   { id: "select", g: "&#9757;", l: "Select" },
+  { id: "edit", g: "&#9998;&#65039;", l: "Edit PDF" },
   { id: "hl", g: "&#128396;", l: "Highlight" },
   { id: "ul", g: "<u>U</u>", l: "Underline" },
   { id: "st", g: "<s>S</s>", l: "Strike" },
@@ -720,7 +742,9 @@ function setTool(id) {
   S.tool = id;
   $$(".tool").forEach((b) => b.classList.toggle("on", b.dataset.tool === id));
   document.body.className = DRAW_TOOLS.has(id) ? "tool-draw" : "tool-" + id;
-  if (id !== "select") { S.sel = null; closeCtx(); redrawAll(); }
+  if (id !== "select" && id !== "edit") { S.sel = null; closeCtx(); }
+  redrawAll();
+  if (id === "edit") analyzeVisible();
   renderPropbar();
 }
 
@@ -734,6 +758,7 @@ function renderPropbar() {
   else if (t === "ink") html = sw(COLORS, P.color, "color") + widths + `<label><input type="checkbox" data-set="penOnly" ${P.penOnly ? "checked" : ""}> Pencil only</label>`;
   else if (["rect", "ell", "line", "arrow"].includes(t)) html = sw(COLORS, P.color, "color") + widths;
   else if (t === "text") html = sw(COLORS, P.color, "color") + `<label>Font <select data-set="font">${Object.keys(FONT_NAMES).map((f) => `<option ${P.font === f ? "selected" : ""}>${f}</option>`).join("")}</select></label><label>Size <select data-set="size">${[8, 10, 12, 14, 18, 24, 36].map((w) => `<option ${P.size === w ? "selected" : ""}>${w}</option>`).join("")}</select></label><button class="btn sm ${P.bold ? "on" : ""}" data-set="bold"><b>B</b></button><button class="btn sm ${P.italic ? "on" : ""}" data-set="italic"><i>I</i></button>`;
+  else if (t === "edit") html = `<span class="muted">Tap a line of text to change it. Tap a picture to move, resize, replace or delete it.</span><label><input type="checkbox" data-set="removeOldText" ${S.removeOldText ? "checked" : ""}> Remove replaced text for real</label>`;
   else if (t === "note") html = `<span class="muted">Tap the page to add a note.</span>`;
   else if (t === "redact") html = `<span class="muted">Drag over text to redact. Saving permanently removes what is under the boxes.</span>`;
   else if (t === "white") html = `<span class="muted">Drag to cover content with white.</span>`;
@@ -752,6 +777,7 @@ $("#propbar").addEventListener("change", (e) => {
   const el = e.target.closest("[data-set]");
   if (!el) return;
   const k = el.dataset.set;
+  if (k === "removeOldText") { S.removeOldText = el.checked; return; }
   setProp(k, el.type === "checkbox" ? el.checked : k === "width" || k === "size" ? +el.value : el.value);
 });
 
@@ -830,6 +856,26 @@ pagesEl.addEventListener("pointerdown", (e) => {
     if (S.sel) select(entry, null);
     return;
   }
+  if (tool === "edit") {
+    e.preventDefault();
+    const sel = selectedObj();
+    if (sel && sel.t === "ximg" && S.sel.entry === entry.id) {
+      const h = handlesOf(entry, sel).find((h) => Math.hypot(h.x - x, h.y - y) < 18);
+      if (h) { snapshot(); drag = { mode: "resize", entry, o: sel, h: h.k }; return; }
+    }
+    for (let i = entry.edits.length - 1; i >= 0; i--) {
+      const o = entry.edits[i];
+      if (o.t === "ximg" && hitObj(entry, o, x, y)) { select(entry, o); drag = { mode: "move", entry, o, x, y, orig: clone(o), snapped: false }; return; }
+    }
+    if (entry.analyzed) {
+      const u = entry.vp.convertToPdfPoint(x, y);
+      const onText = (entry.xlines || []).some((l) => u[0] >= l.rect[0] - 2 && u[0] <= l.rect[2] + 2 && u[1] >= l.rect[1] - 1 && u[1] <= l.rect[3] + 1);
+      const pic = !onText && pictureAt(entry, u);
+      if (pic) { const o = pictureObject(entry, pic); select(entry, o); drag = { mode: "move", entry, o, x, y, orig: clone(o), snapped: false }; return; }
+    }
+    editPoint(entry, x, y);
+    return;
+  }
   if (tool === "text") {
     e.preventDefault();
     for (let i = entry.edits.length - 1; i >= 0; i--) if (entry.edits[i].t === "text" && hitObj(entry, entry.edits[i], x, y)) { openTextEditor(entry, entry.edits[i], false); return; }
@@ -878,16 +924,25 @@ window.addEventListener("pointermove", (e) => {
     if (!drag.snapped) { drag.snapped = true; snapshot(); }
     const a = vp.convertToPdfPoint(drag.x, drag.y), b = vp.convertToPdfPoint(x, y), dx = b[0] - a[0], dy = b[1] - a[1];
     moveObj(drag.o, drag.orig, dx, dy);
+    if (drag.o.t === "ximg") drag.o.unchanged = false;
     drawOverlay(entry);
     positionCtx();
   } else if (drag.mode === "resize") {
     e.preventDefault();
     resizeObj(entry, drag.o, drag.h, x, y);
+    if (drag.o.t === "ximg") { drag.o.unchanged = false; keepAspect(drag.o, drag.h); }
     drawOverlay(entry);
     positionCtx();
   }
 }, { passive: false });
 
+function keepAspect(o, h) {
+  const w0 = o.box0[2] - o.box0[0], h0 = o.box0[3] - o.box0[1];
+  if (!(w0 > 0 && h0 > 0)) return;
+  const asp = h0 / w0;
+  const w = Math.max(8, o.b[0] - o.a[0]);
+  if (h === "b") { o.b[0] = o.a[0] + w; o.b[1] = o.a[1] + w * asp; } else { o.a[0] = o.b[0] - w; o.a[1] = o.b[1] - w * asp; }
+}
 function moveObj(o, orig, dx, dy) {
   const mv = (p) => [p[0] + dx, p[1] + dy];
   if (o.p) o.p = mv(orig.p);
@@ -976,11 +1031,13 @@ function showCtx() {
   bar.className = "ctx";
   const btn = (act, label, title) => `<button class="btn sm" data-ctx="${act}" title="${title}">${label}</button>`;
   let h = "";
-  if (o.t === "text" || o.t === "note") h += btn("edit", "Edit", "Edit text");
+  if (o.t === "text" || o.t === "note" || o.t === "tedit") h += btn("edit", "Edit", "Edit text");
+  if (o.t === "ximg") h += btn("replace", "Replace", "Use a different picture") + btn("xdel", "Delete", "Delete this picture") + btn("reset", "Reset", "Put the original back");
+  if (o.t === "tedit") h += btn("reset", "Restore", "Put the original text back");
   if (o.t === "text") h += btn("sizeDown", "A&#8722;", "Smaller") + btn("sizeUp", "A+", "Larger");
   if (["ink", "rect", "ell", "line", "arrow"].includes(o.t)) h += btn("wDown", "&#8722;", "Thinner") + btn("wUp", "+", "Thicker");
   if (o.color !== undefined && o.t !== "note" && o.t !== "redact" && o.t !== "white") h += btn("color", `<span class="sw" style="width:18px;height:18px;background:${o.color}"></span>`, "Color");
-  h += btn("dup", "Copy", "Duplicate") + btn("del", "Delete", "Delete");
+  if (o.t !== "ximg" && o.t !== "tedit") h += btn("dup", "Copy", "Duplicate") + btn("del", "Delete", "Delete");
   bar.innerHTML = h;
   bar.onclick = (e) => { const b = e.target.closest("[data-ctx]"); if (b) ctxAction(b.dataset.ctx, b); };
   bar.addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -997,6 +1054,10 @@ function positionCtx() {
 function ctxAction(a, btn) {
   const o = selectedObj(), entry = S.sel && entryById(S.sel.entry);
   if (!o || !entry) return;
+  if (o.t === "ximg" && (a === "del" || a === "xdel")) { snapshot(); o.del = true; o.unchanged = false; select(entry, null); drawOverlay(entry); return; }
+  if ((o.t === "ximg" || o.t === "tedit") && (a === "reset" || a === "del")) { snapshot(); entry.edits = entry.edits.filter((x) => x !== o); select(entry, null); return; }
+  if (a === "replace") return replaceImage(entry, o);
+  if (o.t === "tedit" && a === "edit") return openLineEditor(entry, { text: o.text, x0: o.base[0], x1: o.rect[2], y: o.base[1], size: o.size, font: o.font, bold: o.bold, italic: o.italic, rect: o.rect, fg: o.fg, bg: o.bg }, o);
   if (a === "del") { snapshot(); entry.edits = entry.edits.filter((x) => x !== o); select(entry, null); return; }
   if (a === "dup") { snapshot(); const c = clone(o); c.id = uid(); const d = 14 / entry.vp.scale; if (c.p) c.p = [c.p[0] + d, c.p[1] - d]; if (c.a) { c.a = [c.a[0] + d, c.a[1] - d]; c.b = [c.b[0] + d, c.b[1] - d]; } if (c.pts) c.pts = c.pts.map((p) => [p[0] + d, p[1] - d]); if (c.rects) c.rects = c.rects.map((r) => [r[0] + d, r[1] - d, r[2] + d, r[3] - d]); if (c.segs) c.segs = c.segs.map((s) => [s[0] + d, s[1] - d, s[2] + d, s[3] - d]); entry.edits.push(c); select(entry, c); return; }
   if (a === "edit") { if (o.t === "text") openTextEditor(entry, o, false); else askText("Note", o.text, (t) => { snapshot(); o.text = t; }); return; }
@@ -1346,6 +1407,259 @@ function imagePageEntry(im, paper = "Folio 8.5 x 13 in") {
   return e;
 }
 
+
+// ------------------------------------------------------------------ editing what is already on the page
+const mmul = (A, B) => [A[0] * B[0] + A[1] * B[2], A[0] * B[1] + A[1] * B[3], A[2] * B[0] + A[3] * B[2], A[2] * B[1] + A[3] * B[3], A[4] * B[0] + A[5] * B[2] + B[4], A[4] * B[1] + A[5] * B[3] + B[5]];
+const minv = (M) => { const d = M[0] * M[3] - M[1] * M[2]; return d ? [M[3] / d, -M[1] / d, -M[2] / d, M[0] / d, (M[2] * M[5] - M[3] * M[4]) / d, (M[1] * M[4] - M[0] * M[5]) / d] : [1, 0, 0, 1, 0, 0]; };
+const latin = (u8, a, b) => { let s = ""; for (let i = a; i < b; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, Math.min(b, i + 8192))); return s; };
+const WS = new Set([0, 9, 10, 12, 13, 32]);
+const DELIM = new Set("()<>[]{}/%".split("").map((c) => c.charCodeAt(0)));
+
+// Reads a page's drawing instructions and reports every picture it draws (`/Name Do`) with the
+// transform in force, so the picture's place on the page and its exact bytes in the stream are known.
+function scanContent(u8) {
+  const n = u8.length, found = [], opd = [], stack = [], blocks = [];
+  let ctm = [1, 0, 0, 1, 0, 0], i = 0, cur = null, tm = [1, 0, 0, 1, 0, 0], tlm = tm, lead = 0;
+  while (i < n) {
+    const c = u8[i];
+    if (WS.has(c)) { i++; continue; }
+    if (c === 0x25) { while (i < n && u8[i] !== 10 && u8[i] !== 13) i++; continue; }
+    const a = i;
+    if (c === 0x28) { let depth = 1; i++; while (i < n && depth) { const d = u8[i]; if (d === 0x5c) i += 2; else { if (d === 0x28) depth++; else if (d === 0x29) depth--; i++; } } opd.push({ t: "str", a, b: i }); continue; }
+    if (c === 0x3c) { if (u8[i + 1] === 0x3c) { i += 2; opd.push({ t: "dict", a, b: i }); } else { while (i < n && u8[i] !== 0x3e) i++; i++; opd.push({ t: "hex", a, b: i }); } continue; }
+    if (c === 0x3e) { i += u8[i + 1] === 0x3e ? 2 : 1; opd.push({ t: "dict", a, b: i }); continue; }
+    if (c === 0x5b || c === 0x5d || c === 0x7b || c === 0x7d || c === 0x29) { i++; opd.push({ t: "delim", a, b: i }); continue; }
+    if (c === 0x2f) { i++; while (i < n && !WS.has(u8[i]) && !DELIM.has(u8[i])) i++; opd.push({ t: "name", a, b: i, text: latin(u8, a + 1, i) }); continue; }
+    while (i < n && !WS.has(u8[i]) && !DELIM.has(u8[i])) i++;
+    const text = latin(u8, a, i);
+    if (/^[+-]?(\d+\.?\d*|\.\d+)$/.test(text)) { opd.push({ t: "num", a, b: i, v: parseFloat(text) }); continue; }
+    if (text === "q") stack.push(ctm);
+    else if (text === "Q") { if (stack.length) ctm = stack.pop(); }
+    else if (text === "cm") { const nums = opd.filter((o) => o.t === "num").slice(-6); if (nums.length === 6) ctm = mmul(nums.map((o) => o.v), ctm); }
+    else if (text === "BT") { cur = { shows: [], complex: false }; tm = [1, 0, 0, 1, 0, 0]; tlm = tm; }
+    else if (text === "ET") { if (cur) { blocks.push(cur); cur = null; } }
+    else if (cur && text === "Tm") { const nums = opd.filter((o) => o.t === "num").slice(-6); if (nums.length === 6) { tm = nums.map((o) => o.v); tlm = tm; } }
+    else if (cur && (text === "Td" || text === "TD")) { const nums = opd.filter((o) => o.t === "num").slice(-2); if (nums.length === 2) { tlm = mmul([1, 0, 0, 1, nums[0].v, nums[1].v], tlm); tm = tlm; if (text === "TD") lead = -nums[1].v; } }
+    else if (cur && text === "TL") { const nm = opd.filter((o) => o.t === "num").slice(-1); if (nm.length) lead = nm[0].v; }
+    else if (cur && text === "T*") { tlm = mmul([1, 0, 0, 1, 0, -lead], tlm); tm = tlm; }
+    else if (cur && (text === "Tj" || text === "TJ")) {
+      let k = opd.length - 1;
+      if (text === "TJ") { while (k >= 0 && !(opd[k].t === "delim" && latin(u8, opd[k].a, opd[k].b) === "[")) k--; } 
+      const start = k >= 0 ? opd[k].a : a;
+      cur.shows.push({ x: tm[4] * ctm[0] + tm[5] * ctm[2] + ctm[4], y: tm[4] * ctm[1] + tm[5] * ctm[3] + ctm[5], a: start, b: i });
+    }
+    else if (cur && (text === "'" || text === '"')) cur.complex = true;
+    else if (text === "Do") { const nm = opd[opd.length - 1]; if (nm && nm.t === "name") found.push({ name: nm.text, ctm: ctm.slice(), a: nm.a, b: i }); }
+    else if (text === "BI") {
+      let j = i;
+      while (j < n - 2 && !(u8[j] === 0x49 && u8[j + 1] === 0x44 && WS.has(u8[j - 1]) && (j + 2 >= n || WS.has(u8[j + 2])))) j++;
+      j += 3;
+      while (j < n - 1 && !(u8[j] === 0x45 && u8[j + 1] === 0x49 && WS.has(u8[j - 1]) && (j + 2 >= n || WS.has(u8[j + 2])))) j++;
+      i = j + 2;
+    }
+    opd.length = 0;
+  }
+  return { found, blocks };
+}
+
+function pageContentBytes(pg) {
+  const node = pg.node, ctx = node.context;
+  const c = node.Contents();
+  const list = c instanceof PDFArray ? c.asArray().map((r) => ctx.lookup(r)) : c ? [c] : [];
+  const parts = [];
+  for (const st of list) {
+    if (!st) continue;
+    if (st instanceof L.PDFRawStream) parts.push(L.decodePDFRawStream(st).decode());
+    else if (st.getUnencodedContents) parts.push(st.getUnencodedContents());
+  }
+  let len = 0; parts.forEach((x) => (len += x.length + 1));
+  const out = new Uint8Array(len); let o = 0;
+  for (const x of parts) { out.set(x, o); o += x.length; out[o++] = 10; }
+  return out;
+}
+function pageResources(pg) {
+  let node = pg.node, guard = 0;
+  while (node && guard++ < 24) {
+    const r = node.lookupMaybe(PDFName.of("Resources"), L.PDFDict);
+    if (r) return r;
+    node = node.lookupMaybe(PDFName.of("Parent"), L.PDFDict);
+  }
+  return null;
+}
+// The pictures (not forms) the page draws, in drawing order, numbered k = 0, 1, 2...
+function pagePictures(pg) {
+  const bytes = pageContentBytes(pg), res = pageResources(pg);
+  const xo = res && res.lookupMaybe(PDFName.of("XObject"), L.PDFDict);
+  const pics = [];
+  for (const f of scanContent(bytes).found) {
+    const obj = xo && xo.lookup(PDFName.of(f.name));
+    const st = obj && obj.dict && obj.dict.get(PDFName.of("Subtype"));
+    if (st !== PDFName.of("Image")) continue;
+    const xs = [0, 1, 1, 0].map((u, j) => f.ctm[0] * u + f.ctm[2] * [0, 0, 1, 1][j] + f.ctm[4]);
+    const ys = [0, 1, 1, 0].map((u, j) => f.ctm[1] * u + f.ctm[3] * [0, 0, 1, 1][j] + f.ctm[5]);
+    pics.push({ k: pics.length, name: f.name, ctm: f.ctm, a: f.a, b: f.b, bbox: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] });
+  }
+  return { pics, bytes, res };
+}
+async function sourceLib(srcIdx) {
+  const src = S.sources[srcIdx];
+  if (!src.lib) src.lib = await PDFDocument.load(src.bytes, { ignoreEncryption: true, updateMetadata: false });
+  return src.lib;
+}
+
+// Text lines (runs on the same baseline) the user can edit.
+async function buildLines(entry) {
+  const page = await getPageObj(entry);
+  const tc = await page.getTextContent({ disableNormalization: true });
+  const items = [];
+  for (const it of tc.items) {
+    if (it.str === undefined || !it.transform || !it.str.trim() && !it.str.length) continue;
+    const t = it.transform;
+    if (Math.abs(t[1]) > 0.01 || Math.abs(t[2]) > 0.01) continue;
+    const size = Math.abs(t[3]) || it.height || 10;
+    let name = "", family = (tc.styles[it.fontName] || {}).fontFamily || "sans-serif";
+    try { if (page.commonObjs.has(it.fontName)) name = page.commonObjs.get(it.fontName).name || ""; } catch {}
+    const fam = /courier|mono|consolas/i.test(name) || family === "monospace" ? "Courier" : /times|serif|georgia|cambria|garamond|book|palatino/i.test(name) || family === "serif" ? "Times" : "Helvetica";
+    items.push({ s: it.str, x: t[4], y: t[5], w: it.width || 0, size, fam, bold: /bold|black|heavy/i.test(name), italic: /italic|oblique/i.test(name) });
+  }
+  items.sort((p, q) => q.y - p.y || p.x - q.x);
+  const lines = [];
+  for (const it of items) {
+    const ln = lines.find((l) => Math.abs(l.y - it.y) < 0.4 * Math.max(l.size, it.size) && it.x >= l.x1 - l.size * 0.3 && it.x - l.x1 < Math.max(l.size, it.size) * 2.5);
+    if (ln) {
+      const gap = it.x - ln.x1;
+      if (gap > it.size * 0.18 && !ln.text.endsWith(" ") && !it.s.startsWith(" ")) ln.text += " ";
+      ln.text += it.s; ln.x1 = it.x + it.w; ln.size = Math.max(ln.size, it.size);
+    } else lines.push({ text: it.s, x0: it.x, x1: it.x + it.w, y: it.y, size: it.size, font: it.fam, bold: it.bold, italic: it.italic });
+  }
+  return lines.filter((l) => l.text.trim()).map((l) => ({ ...l, rect: [l.x0, l.y - 0.25 * l.size, Math.max(l.x1, l.x0 + 4), l.y + 0.9 * l.size] }));
+}
+
+async function ensureAnalysis(entry) {
+  if (entry.blank || !S.sources[entry.src] || entry.analyzed) return;
+  entry.analyzed = true;
+  try { const lib = await sourceLib(entry.src); entry.ximgs = pagePictures(lib.getPage(entry.idx)).pics; } catch (e) { console.warn("pictures", e); entry.ximgs = []; }
+  try { entry.xlines = await buildLines(entry); } catch (e) { console.warn("text lines", e); entry.xlines = []; }
+}
+async function analyzeVisible() {
+  for (const e of S.pages) { if (e.vp && e.el) { await ensureAnalysis(e); drawOverlay(e); } }
+}
+
+function sampleColors(entry, rect) {
+  const cv = entry.el.querySelector("canvas.pg");
+  const out = { fg: "#000000", bg: "#ffffff" };
+  if (!cv) return out;
+  const a = aabb(entry.vp, rect), r = cv.width / entry.vp.width;
+  const x = Math.max(0, Math.floor(a.x * r)), y = Math.max(0, Math.floor(a.y * r)), w = Math.max(1, Math.min(cv.width - x, Math.ceil(a.w * r))), h = Math.max(1, Math.min(cv.height - y, Math.ceil(a.h * r)));
+  try {
+    const d = cv.getContext("2d").getImageData(x, y, w, h).data;
+    const counts = new Map(); let dark = null, darkL = 999;
+    for (let i = 0; i < d.length; i += 4) {
+      const key = ((d[i] >> 4) << 8) | ((d[i + 1] >> 4) << 4) | (d[i + 2] >> 4);
+      counts.set(key, (counts.get(key) || 0) + 1);
+      const l = d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
+      if (l < darkL) { darkL = l; dark = [d[i], d[i + 1], d[i + 2]]; }
+    }
+    let best = 0, bk = 0xfff; counts.forEach((v, k) => { if (v > best) { best = v; bk = k; } });
+    const bg = [((bk >> 8) & 15) * 17, ((bk >> 4) & 15) * 17, (bk & 15) * 17];
+    const hex = (c) => "#" + c.map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
+    out.bg = hex(bg);
+    const bgL = bg[0] * 0.3 + bg[1] * 0.59 + bg[2] * 0.11;
+    if (dark && bgL - darkL > 60) out.fg = hex(dark);
+    else out.fg = bgL > 128 ? "#000000" : "#ffffff";
+  } catch {}
+  return out;
+}
+
+async function editPoint(entry, x, y) {
+  const vp = entry.vp;
+  for (let i = entry.edits.length - 1; i >= 0; i--) {
+    const o = entry.edits[i];
+    if ((o.t === "tedit" || o.t === "ximg") && hitObj(entry, o, x, y)) {
+      if (o.t === "tedit") return openLineEditor(entry, { text: o.text, x0: o.base[0], x1: o.rect[2], y: o.base[1], size: o.size, font: o.font, bold: o.bold, italic: o.italic, rect: o.rect, fg: o.fg, bg: o.bg }, o);
+      return select(entry, o);
+    }
+  }
+  await ensureAnalysis(entry);
+  const u = vp.convertToPdfPoint(x, y);
+  const line = (entry.xlines || []).find((l) => u[0] >= l.rect[0] - 2 && u[0] <= l.rect[2] + 2 && u[1] >= l.rect[1] - 1 && u[1] <= l.rect[3] + 1);
+  if (line) {
+    if (vp.rotation !== 0) return toast("Text on a rotated page can't be edited here. Rotate the page back first.", 4000);
+    return openLineEditor(entry, { ...line, ...sampleColors(entry, line.rect) }, null);
+  }
+  const pic = pictureAt(entry, u);
+  if (pic) return select(entry, pictureObject(entry, pic));
+  select(entry, null);
+}
+
+const pictureAt = (entry, u) => (entry.ximgs || []).slice().reverse().find((m) => u[0] >= m.bbox[0] && u[0] <= m.bbox[2] && u[1] >= m.bbox[1] && u[1] <= m.bbox[3]);
+function pictureObject(entry, pic) {
+  const vp = entry.vp, a = aabb(vp, pic.bbox), cv = entry.el.querySelector("canvas.pg");
+  let prev = null;
+  if (cv) {
+    const r = cv.width / vp.width, t = document.createElement("canvas");
+    t.width = Math.max(1, Math.round(a.w * r)); t.height = Math.max(1, Math.round(a.h * r));
+    t.getContext("2d").drawImage(cv, a.x * r, a.y * r, a.w * r, a.h * r, 0, 0, t.width, t.height);
+    prev = addImage(t.toDataURL("image/png"));
+  }
+  const o = { id: uid(), t: "ximg", k: pic.k, box0: pic.bbox.slice(), a: [pic.bbox[0], pic.bbox[1]], b: [pic.bbox[2], pic.bbox[3]], unchanged: true, del: false, prev, img: null };
+  entry.edits.push(o);
+  return o;
+}
+
+function openLineEditor(entry, line, existing) {
+  closeEditor(); select(entry, null);
+  const vp = entry.vp, k = vp.scale, a = aabb(vp, line.rect);
+  const inp = document.createElement("input");
+  inp.type = "text"; inp.className = "tedit"; inp.value = line.text; inp.spellcheck = false;
+  inp.setAttribute("autocapitalize", "off"); inp.setAttribute("autocomplete", "off");
+  const fam = CSS_FONT[line.font || "Helvetica"];
+  const meas = document.createElement("canvas").getContext("2d");
+  const fit = () => { meas.font = `${line.italic ? "italic " : ""}${line.bold ? "700 " : ""}${line.size * k}px ${fam}`; inp.style.width = Math.max(a.w, meas.measureText(inp.value).width) + 20 * k + "px"; };
+  inp.style.cssText = `left:${a.x - 2}px;top:${a.y - 2}px;height:${a.h + 4}px;font-size:${line.size * k}px;line-height:${a.h + 4}px;padding:0 2px;border:1px solid #2b47b5;background:${line.bg || "#fff"};color:${line.fg || "#000"};font-family:${fam};font-weight:${line.bold ? 700 : 400};font-style:${line.italic ? "italic" : "normal"};`;
+  fit();
+  entry.el.appendChild(inp);
+  inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
+  let done = false;
+  const finish = (commit) => {
+    if (done) return; done = true;
+    const text = inp.value;
+    inp.remove();
+    if (!commit) return;
+    const orig = existing ? existing.orig : line.text;
+    if (existing) {
+      if (text === orig) { snapshot(); entry.edits = entry.edits.filter((o) => o !== existing); }
+      else if (text !== existing.text) { snapshot(); existing.text = text; }
+    } else if (text !== orig) {
+      snapshot();
+      entry.edits.push({ id: uid(), t: "tedit", rect: line.rect.slice(), base: [line.x0, line.y], size: line.size, font: line.font, bold: !!line.bold, italic: !!line.italic, fg: line.fg || "#000000", bg: line.bg || "#ffffff", orig, text });
+    }
+    drawOverlay(entry);
+  };
+  inp.oninput = fit;
+  inp.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); finish(true); } else if (e.key === "Escape") { e.preventDefault(); finish(false); } };
+  inp.onblur = () => finish(true);
+}
+
+function replaceImage(entry, o) {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/*";
+  inp.onchange = async () => {
+    const f = inp.files[0];
+    if (!f) return;
+    try {
+      const im = await normalizeImage(f);
+      snapshot();
+      const bw = o.box0[2] - o.box0[0], bh = o.box0[3] - o.box0[1], sc = Math.min(bw / im.w, bh / im.h);
+      const w = im.w * sc, h = im.h * sc, cx = (o.box0[0] + o.box0[2]) / 2, cy = (o.box0[1] + o.box0[3]) / 2;
+      o.img = addImage(im.url); o.del = false; o.unchanged = false;
+      o.a = [cx - w / 2, cy - h / 2]; o.b = [cx + w / 2, cy + h / 2];
+      drawOverlay(entry); showCtx();
+    } catch { toast("That picture could not be read."); }
+  };
+  inp.click();
+}
+
 // ------------------------------------------------------------------ writing the PDF (pdf-lib)
 async function drawBoxImage(out, pg, o, url, w, h, emb) {
   let img = emb.get(url);
@@ -1423,6 +1737,24 @@ async function drawObjects(out, pg, objs, ctx) {
         pg.drawText(o.text, { x: o.c[0] + dx * Math.cos(phi) - dy * Math.sin(phi), y: o.c[1] + dx * Math.sin(phi) + dy * Math.cos(phi), size: o.size, font, color: pdfColor(o.color), opacity: o.op, rotate: degrees((o.ang || 0) + 45) });
         break;
       }
+      case "ximg": break;
+      case "tedit": {
+        const font = await getFont(fontKey(o)), pad = 1.2;
+        if (!o._removed) pg.drawRectangle({ x: o.rect[0] - pad, y: o.rect[1] - pad, width: o.rect[2] - o.rect[0] + 2 * pad, height: o.rect[3] - o.rect[1] + 2 * pad, color: pdfColor(o.bg) });
+        if (!o.text) break;
+        let ok = true;
+        try { font.encodeText(o.text); } catch { ok = false; }
+        if (ok) pg.drawText(o.text, { x: o.base[0], y: o.base[1], size: o.size, font, color: pdfColor(o.fg) });
+        else {
+          const k = 3, c = document.createElement("canvas"), x = c.getContext("2d");
+          x.font = `${o.italic ? "italic " : ""}${o.bold ? "700 " : ""}${o.size * k}px ${CSS_FONT[o.font || "Helvetica"]}`;
+          c.width = Math.ceil(x.measureText(o.text).width) + 8; c.height = Math.ceil(o.size * k * 1.4);
+          x.font = `${o.italic ? "italic " : ""}${o.bold ? "700 " : ""}${o.size * k}px ${CSS_FONT[o.font || "Helvetica"]}`;
+          x.fillStyle = o.fg; x.textBaseline = "alphabetic"; x.fillText(o.text, 2, o.size * k * 1.05);
+          await drawBoxImage(out, pg, { p: [o.base[0] - 2 / k, o.base[1] + o.size * 1.05], ang: 0 }, c.toDataURL("image/png"), c.width / k, c.height / k, emb);
+        }
+        break;
+      }
       case "ocr": {
         const font = await getFont("Helvetica");
         for (const w of o.words) { try { pg.drawText(w.s, { x: w.p[0], y: w.p[1], size: Math.max(2, w.size), font, opacity: 0, rotate: degrees(w.ang || 0) }); } catch {} }
@@ -1430,6 +1762,61 @@ async function drawObjects(out, pg, objs, ctx) {
       }
     }
   }
+}
+
+// Pictures the user moved, resized, replaced or deleted, and old text that was replaced, are changed
+// where the page itself draws them (not covered up).
+async function applyImageEdits(out, pg, p) {
+  const edits = p.edits.filter((o) => o.t === "ximg" && !o.unchanged);
+  const teds = p.edits.filter((o) => o.t === "tedit");
+  teds.forEach((o) => (o._removed = false));
+  if (!edits.length && !teds.length) return;
+  const { pics, bytes, res } = pagePictures(pg);
+  const repl = [], fmt = (v) => String(+v.toFixed(5));
+  let ownXo = null, n = 0;
+  for (const o of edits) {
+    const pic = pics[o.k];
+    if (!pic) continue;
+    if (o.del) { repl.push({ a: pic.a, b: pic.b, text: " " }); continue; }
+    const x0 = Math.min(o.a[0], o.b[0]), y0 = Math.min(o.a[1], o.b[1]), x1 = Math.max(o.a[0], o.b[0]), y1 = Math.max(o.a[1], o.b[1]);
+    const w0 = o.box0[2] - o.box0[0] || 1, h0 = o.box0[3] - o.box0[1] || 1, sx = (x1 - x0) / w0, sy = (y1 - y0) / h0;
+    const Sm = [sx, 0, 0, sy, x0 - sx * o.box0[0], y0 - sy * o.box0[1]];
+    const M = mmul(mmul(pic.ctm, Sm), minv(pic.ctm));
+    let name = pic.name;
+    if (o.img) {
+      const url = IMGS.get(o.img), data = dataUrlBytes(url);
+      const image = /^data:image\/png/.test(url) ? await out.embedPng(data) : await out.embedJpg(data);
+      if (!ownXo) {
+        const r2 = (res || out.context.obj({})).clone();
+        const x0d = r2.lookupMaybe(PDFName.of("XObject"), L.PDFDict);
+        ownXo = x0d ? x0d.clone() : out.context.obj({});
+        r2.set(PDFName.of("XObject"), ownXo);
+        pg.node.set(PDFName.of("Resources"), r2);
+      }
+      name = "WPpic" + ++n + "x" + Math.floor(Math.random() * 1e6);
+      ownXo.set(PDFName.of(name), image.ref);
+    }
+    repl.push({ a: pic.a, b: pic.b, text: `q ${M.map(fmt).join(" ")} cm /${name} Do Q` });
+  }
+  if (teds.length) {
+    const used = new Set();
+    for (const blk of scanContent(bytes).blocks) {
+      if (blk.complex || blk.shows.length !== 1) continue;
+      const sh = blk.shows[0];
+      const hit = teds.find((o) => sh.x >= o.rect[0] - 2 && sh.x <= o.rect[2] + 2 && Math.abs(sh.y - o.base[1]) <= 0.35 * o.size);
+      if (hit && !used.has(sh.a)) { used.add(sh.a); hit._removed = true; repl.push({ a: sh.a, b: sh.b, text: " " }); }
+    }
+  }
+  if (!repl.length) return;
+  repl.sort((x, y) => x.a - y.a);
+  const enc = new TextEncoder(), parts = [];
+  let at = 0;
+  for (const r of repl) { parts.push(bytes.subarray(at, r.a), enc.encode(r.text)); at = r.b; }
+  parts.push(bytes.subarray(at));
+  let len = 0; parts.forEach((x) => (len += x.length));
+  const all = new Uint8Array(len); let o = 0;
+  for (const x of parts) { all.set(x, o); o += x.length; }
+  pg.node.set(PDFName.of("Contents"), out.context.register(out.context.flateStream(all)));
 }
 
 function applyFormValues(out) {
@@ -1476,6 +1863,7 @@ async function buildPdf(opts = {}) {
   for (let i = 0; i < pages.length; i++) {
     const p = pages[i], pg = out.getPage(i);
     const vp = await viewportFor(p, 1);
+    await applyImageEdits(out, pg, p);
     const objs = p.edits.concat(decorObjects(p, i, vp));
     await drawObjects(out, pg, objs, ctx);
     if (p.rot) pg.setRotation(degrees((pg.getRotation().angle + p.rot) % 360));
@@ -1522,7 +1910,8 @@ async function restoreTextLayer(doc, font, newPage, srcPage, redactRects) {
 
 // Redaction: pages with redaction boxes become pictures with the boxes burned in, so the text under them is gone.
 async function applyRedactions(bytes, pages) {
-  const idxs = pages.map((p, i) => (p.edits.some((o) => o.t === "redact") ? i : -1)).filter((i) => i >= 0);
+  const wantsRaster = (p) => p.edits.some((o) => o.t === "redact" || (S.removeOldText && o.t === "tedit" && !o._removed));
+  const idxs = pages.map((p, i) => (wantsRaster(p) ? i : -1)).filter((i) => i >= 0);
   if (!idxs.length) return bytes;
   const pdf = await pdfjsLib.getDocument(getDocOpts(bytes.slice())).promise;
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
@@ -1539,7 +1928,10 @@ async function applyRedactions(bytes, pages) {
     const w = vp.width / k, h = vp.height / k;
     const np = doc.insertPage(i, [w, h]);
     np.drawImage(jpg, { x: 0, y: 0, width: w, height: h });
-    await restoreTextLayer(doc, helv, np, await pdf.getPage(i + 1), reds.map((o) => [Math.min(o.a[0], o.b[0]), Math.min(o.a[1], o.b[1]), Math.max(o.a[0], o.b[0]), Math.max(o.a[1], o.b[1])]));
+    const edited = S.removeOldText ? pages[i].edits.filter((o) => o.t === "tedit" && !o._removed) : [];
+    const srcPage = await pdf.getPage(i + 1);
+    await restoreTextLayer(doc, helv, np, srcPage, reds.map((o) => [Math.min(o.a[0], o.b[0]), Math.min(o.a[1], o.b[1]), Math.max(o.a[0], o.b[0]), Math.max(o.a[1], o.b[1])]).concat(edited.map((o) => o.rect)));
+    for (const o of edited) { if (o.text && srcPage.rotate % 360 === 0) { try { np.drawText(o.text, { x: o.base[0] - srcPage.view[0], y: o.base[1] - srcPage.view[1], size: o.size, font: helv, opacity: 0 }); } catch {} } }
     doc.removePage(i + 1);
   }
   pdf.destroy();
@@ -1573,6 +1965,7 @@ function openSaveDialog() {
   showDialog(`<h3>Save PDF</h3>
     <label>File name</label><input type="text" id="svName" value="${esc(baseName(S.fileName))}-edited.pdf">
     ${hasForm ? `<label><input type="checkbox" id="svFlat" ${S.flatten ? "checked" : ""}> Flatten form fields (make the answers permanent)</label>` : ""}
+    ${S.pages.some((p) => p.edits.some((o) => o.t === "tedit")) ? `<label><input type="checkbox" id="svOld" ${S.removeOldText ? "checked" : ""}> Make sure the old text is really gone</label><div class="muted">The old words are removed from the page when possible. If a line cannot be removed cleanly, this turns that page into a picture (text stays searchable); unticked, the old words would stay hidden under the new ones.</div>` : ""}
     <p class="muted">Your changes are written into a new copy. The original file is not touched.</p>
     <div class="actions"><button class="btn" id="svNo">Cancel</button><button class="btn" id="svShare">Share...</button><button class="btn primary" id="svYes">Download</button></div>`, (b) => {
     $("#svNo", b).onclick = closeDialog;
@@ -1580,6 +1973,7 @@ function openSaveDialog() {
       let name = $("#svName", b).value.trim() || "document.pdf";
       if (!/\.pdf$/i.test(name)) name += ".pdf";
       if (hasForm) S.flatten = $("#svFlat", b).checked;
+      if ($("#svOld", b)) S.removeOldText = $("#svOld", b).checked;
       closeDialog(); toast("Saving...", 0);
       try {
         const bytes = await buildPdf();
@@ -1996,6 +2390,6 @@ window.addEventListener("resize", () => positionCtx());
   setTool("select");
   if (innerWidth > 1000) $("#side").hidden = false;
   $("#zoomLabel").textContent = Math.round(S.scale * 100) + "%";
-  window.__pdfApp = { S, addImage, IMGS, loadDocument, buildPdf, setTool, runSearch, pageAction, addObj, uid, snapshot, undo, redo, openFromFile, insertFiles, viewportFor, drawOverlay, select, ctxAction, applyFormValues, setScale, fitWidth, makeZip, rasterize };
+  window.__pdfApp = { S, addImage, editPoint, ensureAnalysis, scanContent, pagePictures, IMGS, loadDocument, buildPdf, setTool, runSearch, pageAction, addObj, uid, snapshot, undo, redo, openFromFile, insertFiles, viewportFor, drawOverlay, select, ctxAction, applyFormValues, setScale, fitWidth, makeZip, rasterize };
   document.body.dataset.ready = "1";
 })();

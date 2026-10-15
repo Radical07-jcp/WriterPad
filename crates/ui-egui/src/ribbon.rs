@@ -52,6 +52,22 @@ pub fn doc_actions(app: &mut WordApp, ui: &mut Ui) {
     if resp.on_hover_text(tl!("Export a copy to share (PDF, Word document)")).clicked() {
         let _ = app.run("ui.backstage", json!({"value": true, "page": "export"}));
     }
+    // The on-screen keyboard has no Tab key: touch screens get Tab and Shift+Tab buttons.
+    if app.touch_device {
+        ui.add_space(6.0);
+        for (label, back, w) in [("Tab", false, 34.0), ("\u{21e7}Tab", true, 46.0)] {
+            let (r, resp) = ui.allocate_exact_size(vec2(w, 24.0), Sense::click());
+            if resp.hovered() {
+                ui.painter().rect_filled(r, 4.0, t.hover);
+            }
+            ui.painter().text(r.center(), Align2::CENTER_CENTER, label, medium(11.0), t.text);
+            if resp.on_hover_text(if back { "Shift+Tab: back one tab stop, or promote a list item" } else { "Tab: indent to the next tab stop" }).clicked() {
+                app.canvas.focused = true;
+                app.press_tab(back);
+                app.canvas.want_focus = true; // keep typing in the document
+            }
+        }
+    }
     // PDF editor (a page of this site): view, mark up, fill, sign and organize PDFs.
     ui.add_space(6.0);
     let (r, resp) = ui.allocate_exact_size(vec2(38.0, 24.0), Sense::click());
